@@ -1,0 +1,367 @@
+I'm continuing work on my Java POS System project. Here's the context from my previous session:
+
+PROJECT LOCATION: /Users/ed/IdeaProjects/POSSystem
+
+CURRENT STATE:
+- Branch: v1.7-keyboard-polish (current working branch)
+- Main Branch: main
+- Build: ✅ Successful
+- Tech: Java 25, Gradle, H2 Database, Swing GUI, SLF4J+Logback, Gson (for JSON)
+- Status: Phase 1 COMPLETE, Phase 2 COMPLETE & FULLY TESTED ✅
+
+PROJECT ROADMAP (3 PHASES):
+
+PHASE 1: Standalone POS System ✅ COMPLETE
+  Component 1: Lock Screen
+    - Status: ❌ Deferred (will implement later)
+
+  Component 2: POS Interface ✅ COMPLETE
+    - Main transaction interface (Quick Keys, Current Sale, Actions zones)
+    - All dialogs undecorated (no macOS title bar)
+    - Custom close buttons with drag-to-move functionality
+    - Settings dialog with gear icon
+    - Socket Configuration button (links to Phase 2)
+
+  Component 3: Receipt ✅ COMPLETE
+    - Receipt display with custom styling
+    - "New Transaction" button flow
+
+PHASE 2: Multi-POS Journal Viewer ✅ COMPLETE & FULLY TESTED
+  - Java socket server/client architecture (bidirectional)
+  - UDP broadcast auto-discovery (port 9999)
+  - Real-time journal synchronization
+  - Hybrid protocol support (JSON + Pipe-delimited formats)
+  - Dead connection cleanup (automatic zombie client removal)
+  - Active clients monitoring (see who's connected to your server)
+  - Remote journal storage: logs/remote-journals/[POS-NAME]/journal.log
+  - Console color-coding (GREEN for local, BLUE/YELLOW/etc for remote)
+  - Socket Configuration Dialog UI with Active Clients section
+  - Manual connection support (IP:Port) with proper table display
+  - Connection persistence (saved to config/socket-config.json)
+  - Status: ✅ Fully Implemented & Tested | ✅ Production Ready
+
+PHASE 3: Discount Service (Spring Boot Microservice)
+  - Status: ❌ Not started (future work)
+
+CURRENT FOCUS: Polishing Socket Configuration UI (Phase 2 complete and tested)
+
+WHAT WE'VE COMPLETED:
+
+v1.4 - Transaction Logging System:
+✅ Implemented transaction journaling with SLF4J + Logback
+✅ Virtual journal format: YYYY-MM-DD HH:mm:ss.SSS|ACTION|DETAILS
+✅ 10-year retention for compliance, monthly rotation
+✅ Console output matches journal.log format
+✅ Codebase cleanup (removed debug statements, deleted obsolete files)
+
+v1.5 - UI Polish & Refactoring:
+✅ Refactored UI into separate component classes:
+   - PosInterface.java (main container)
+   - ActionsPanel.java (transaction actions + payment buttons)
+   - CurrentSalePanel.java (shopping cart table)
+   - QuickKeysPanel.java (product grid + search)
+✅ Actions Zone redesigned into two sub-zones
+✅ Custom split pane dividers with hover effects
+✅ Button styling system with rounded corners
+✅ Payment zone complete redesign
+✅ All custom dialogs (no more JOptionPane)
+✅ On-screen keyboards for numeric input
+
+v1.6 - UI Dialog Box Polish:
+✅ Removed macOS title bar from ALL dialogs (setUndecorated(true))
+✅ All dialogs are moveable by dragging header (custom mouse listeners)
+✅ All dialogs are NOT resizable (setResizable(false))
+✅ Custom close (X) button on dialogs with red color and hover effect
+✅ Current Sale zone widened from 35% to 42% with dynamic responsive sizing
+✅ Increased font sizes in Current Sale zone (table: 16pt, totals: 18-22pt)
+✅ Settings dialog with 5 buttons:
+   - Light Mode (placeholder)
+   - Dark Mode (placeholder)
+   - Auto Mode (grey button)
+   - Low Attention Span Mode (dark orange button)
+   - Socket Configuration (green button with wrench icon)
+✅ Divider between theme buttons and Socket Configuration
+✅ Close button moved to header (X icon), removed bottom close button
+
+v2.0 - Phase 2: Multi-POS Journal Viewer (COMPLETE):
+✅ Created socket package with 5 new classes:
+   - SocketService.java (server + client + discovery)
+   - SocketConfigDialog.java (UI for socket management)
+   - PosSystemInfo.java (model for discovered POS systems)
+   - RemoteJournalEntry.java (model for journal entries)
+   - SocketConfig.java (JSON persistence)
+✅ Server broadcasting:
+   - Start/Stop server on configurable port (default: 9000)
+   - Broadcasts all local journal entries to connected clients
+   - Handles multiple concurrent client connections
+✅ Client connections:
+   - Connect to remote POS systems by IP:Port
+   - Receive real-time journal entries
+   - Auto-save to logs/remote-journals/[POS-NAME]/journal.log
+✅ UDP auto-discovery:
+   - Broadcasts every 5 seconds on UDP port 9999
+   - Discovers other POS systems on same network
+   - Removes stale entries (30 second timeout)
+✅ Socket Configuration Dialog:
+   - This POS Configuration section (name, port, start/stop server)
+   - Available POS Systems table (with Connect/Disconnect buttons)
+   - Live Journal Viewer (merged chronological display)
+   - Refresh and "+ Add Manual" buttons
+✅ Console color coding:
+   - GREEN for LOCAL entries
+   - BLUE/YELLOW/MAGENTA/CYAN/RED for remote POS (rotated)
+   - Format: YYYY-MM-DD HH:mm:ss.SSS|POS-NAME (IP)|ACTION|DETAILS
+✅ Configuration persistence:
+   - Saved to config/socket-config.json
+   - Manual connections persisted (not auto-connected)
+✅ Integration:
+   - TransactionService now broadcasts to SocketService
+   - PosInterface initializes and wires SocketService
+   - Graceful shutdown handling
+
+v2.1 - Phase 2 Enhancements: Dead Connection Cleanup ✅
+✅ Automatic zombie client detection and removal:
+   - Modified sendMessage() to return success/failure boolean
+   - Added out.flush() and out.checkError() to detect write failures
+   - broadcastJournalEntry() now tracks and removes failed clients
+   - Prevents broadcasting to 15+ dead connections
+✅ Debug logging improvements:
+   - Shows active client count after cleanup
+   - Logs failed send attempts with client IP
+   - Real-time connection status monitoring
+
+v2.2 - Phase 2 Enhancements: Hybrid Protocol Support ✅
+✅ JSON format support for external POS systems:
+   - Auto-detects incoming data format (JSON vs pipe-delimited)
+   - Parses JSON with fields: eventTimestamp, eventType, details, cashierName, amount
+   - Normalizes event types (ITEM_ADDED → ITEM_ADD, etc.)
+   - Maintains compatibility with existing pipe-delimited format
+✅ Universal receiver capability:
+   - Works with any POS system (yours or external)
+   - Seamless integration with different journal formats
+   - Both formats display identically in console and Live Journal Viewer
+
+v2.3 - Phase 2 Enhancements: Active Clients Display ✅
+✅ New "Active Clients Connected to This Server" section:
+   - Shows IP address, connection timestamp, and live duration
+   - Real-time updates when clients connect/disconnect
+   - Compact table view in Socket Configuration Dialog
+   - ConnectedClientInfo data class with connection metadata
+   - ServerClientListener interface for UI notifications
+
+v2.4 - Phase 2 Enhancements: Manual Connection Display Fix ✅
+✅ Manual connections now properly appear in Available POS Systems table:
+   - Creates PosSystemInfo entry when manually connecting
+   - Populates all table fields (POS Name, IP, Port, Status, Action)
+   - Notifies discovery listeners for immediate UI update
+   - Supports mixed discovery (UDP + Manual) in same table
+   - Disconnect/reconnect works seamlessly
+
+KEY FILES:
+
+Core Application:
+- Main entry: src/main/java/org/possystem/Main.java
+- Transaction logic: src/main/java/org/possystem/service/TransactionService.java (integrated with SocketService)
+- Price book: src/main/java/org/possystem/service/PriceBookService.java
+
+UI Files (ui package):
+- PosInterface.java (main frame coordinator, initializes SocketService)
+- ActionsPanel.java (transaction actions + payment zone)
+- CurrentSalePanel.java (shopping cart table, 42% width)
+- QuickKeysPanel.java (product grid + search with on-screen keyboard)
+- SocketConfigDialog.java (Socket Configuration UI) [NEW]
+
+Socket Files (socket package) [NEW PACKAGE]:
+- SocketService.java (server + client + discovery logic)
+- SocketConfigDialog.java (moved to ui package)
+- PosSystemInfo.java (model for discovered POS)
+- RemoteJournalEntry.java (model for journal entries)
+- SocketConfig.java (JSON persistence model)
+
+Configuration & Logs:
+- Logging config: src/main/resources/logback.xml
+- Local transaction logs: logs/transactions/journal.log (NEVER delete - compliance)
+- Remote journals: logs/remote-journals/[POS-NAME]_[IP]/journal.log [NEW]
+- Socket config: config/socket-config.json [NEW]
+
+Dependencies (build.gradle.kts):
+- H2 Database
+- SLF4J + Logback
+- Gson (for JSON persistence) [NEW]
+
+SYSTEM ARCHITECTURE:
+
+Socket Communication (Phase 2):
+- Server Mode: Each POS can broadcast its journal on configurable TCP port (default 9000)
+- Client Mode: Each POS can connect to multiple remote POS systems
+- Discovery: UDP broadcast on port 9999 for auto-discovery
+- Data Format: Hybrid protocol support
+  - Pipe-delimited: YYYY-MM-DD HH:mm:ss.SSS|ACTION|DETAILS (native format)
+  - JSON: {"eventTimestamp":"...","eventType":"...","details":"..."} (external POS)
+  - Auto-detection based on first character ("{" = JSON, otherwise pipe-delimited)
+- Storage: Remote journals saved to logs/remote-journals/
+- Connection Management: Automatic dead client cleanup, active client monitoring
+
+UI Architecture:
+1. Quick Keys Panel (QuickKeysPanel.java)
+   - Product grid with search and on-screen keyboard
+   - Filter dropdowns
+   - Pagination
+
+2. Current Sale Panel (CurrentSalePanel.java)
+   - 42% of screen width (dynamic responsive)
+   - Custom table with checkboxes
+   - Font sizes: 16pt (table), 18-22pt (totals)
+   - Trash icon column for deletion
+   - Quantity +/- editors
+
+3. Actions Panel (ActionsPanel.java)
+   - Transaction Actions (60%) + Payment (40%)
+   - Dynamic button grids
+   - All dialogs undecorated with custom drag
+
+4. Socket Configuration Dialog (SocketConfigDialog.java) [NEW]
+   - This POS Configuration section (name, hostname, port, server status)
+   - Active Clients Connected to This Server (IP, connected time, duration)
+   - Available POS Systems table (discovered + manual connections)
+   - Live Journal Viewer (merged chronological display)
+   - Refresh, Add Manual, Connect/Disconnect buttons
+
+Transaction Service:
+- Business logic for all financial operations
+- Automatic transaction journal logging
+- Integrated with SocketService for broadcasting
+- Methods: createTransaction(), addItem(), voidItem(), voidTransaction(), processCash(), processCard()
+- Tax rate: 7% (TAX_RATE = 0.07)
+
+Socket Service (NEW):
+- Manages server (broadcasting), client (receiving), and discovery
+- Thread-safe with ExecutorService and ScheduledExecutorService
+- Hybrid protocol parser (JSON + pipe-delimited auto-detection)
+- Automatic dead connection cleanup with error detection
+- Active client tracking with connection metadata
+- Listener interfaces for UI updates:
+  - JournalListener (new journal entries)
+  - DiscoveryListener (POS discovered)
+  - ConnectionListener (connected/disconnected)
+  - ServerClientListener (client connected/disconnected to YOUR server)
+
+IMPORTANT NOTES:
+❌ Do NOT add System.out.println() for debugging EXCEPT for Phase 2 socket debugging (temporary)
+✅ Transaction operations logged automatically via TransactionService
+✅ Socket operations have DEBUG output for troubleshooting (will be removed later)
+✅ Console output color-coded for multi-POS journal viewing
+❌ Never delete transaction journal files (compliance requirement)
+✅ All dialogs are undecorated and moveable by header drag
+✅ Socket connections persist but don't auto-connect on restart
+
+COMMUNICATION PROTOCOL:
+⚠️ IMPORTANT: If my prompt starts AND ends with a "?" (question mark), it means I'm asking for your opinion or suggestions FIRST before implementing any code changes. Do NOT make code changes until I confirm which approach to take.
+
+Example:
+- "? What do you think about adding a search feature here ?" → Give opinion, wait for confirmation
+- "Add a search feature here" → Proceed with implementation
+
+TESTING PHASE 2 (Current Work):
+
+Testing Steps:
+1. Terminal 1: ./gradlew run
+   - Settings → Socket Configuration
+   - POS Name: "Counter-1"
+   - Server Port: 9000
+   - Click "Start Server"
+   - Watch console for "DEBUG: Server started successfully on port 9000"
+
+2. Terminal 2: ./gradlew run
+   - Settings → Socket Configuration
+   - POS Name: "Counter-2"
+   - Server Port: 9001 (DIFFERENT PORT!)
+   - Click "Start Server"
+   - Watch console for "DEBUG: Server started successfully on port 9001"
+
+3. Discovery Test:
+   - In either POS: Wait 5-10 seconds
+   - Click "Refresh" button
+   - Watch console for "DEBUG: New POS discovered - Counter-X..."
+   - Table should show the other POS
+
+4. Connection Test:
+   - Click "Connect" next to discovered POS
+   - Watch console for "DEBUG: Successfully connected..."
+   - Status should change to "Connected"
+
+5. Real-Time Sync Test:
+   - In POS #1: Add item, complete transaction
+   - In POS #2: Check console for BLUE colored log from Counter-1
+
+Expected Behavior:
+- BOTH POS act as servers (broadcasting)
+- BOTH POS act as clients (receiving from each other)
+- When POS A connects to POS B, POS A receives POS B's journals
+- Journals are merged chronologically in console and Live Journal Viewer
+
+Known Behaviors (Not Issues):
+✅ Discovery may not work immediately (wait 5-10 seconds, click Refresh) - This is normal
+✅ If no POS discovered, use manual connection with IP:Port - Works perfectly
+✅ Firewall may block UDP port 9999 or TCP ports - Check OS settings if needed
+✅ Two POS on same machine must use different ports (9000, 9001) - Design requirement
+
+MY PREFERENCES:
+- Professional, efficient, and scalable code
+- Step-by-step approach - ONE improvement at a time
+- Clean code - no unnecessary changes or over-engineering
+- Test after each change before moving to the next
+- Clear explanations of what you're doing and why
+- When I use "?" at start and end of prompt, give opinion first, don't implement yet
+
+SESSION START INSTRUCTIONS:
+1. Confirm you see the project at /Users/ed/IdeaProjects/POSSystem
+2. Verify current branch is v1.7-keyboard-polish
+3. Confirm build is successful (./gradlew build)
+4. Acknowledge you understand the step-by-step approach and the "?" protocol
+5. Phase 2 is COMPLETE and TESTED - ready for Phase 3 or UI polish
+6. Wait for me to provide the next task or direction
+
+DO NOT:
+- Run the application automatically
+- Make suggestions or ask questions unless prompted with "?"
+- Start making changes without my specific instruction
+- Work on multiple items at once
+- Remove debug statements in SocketService (needed for troubleshooting)
+
+DO:
+- Wait for me to provide ONE specific improvement or test feedback
+- Implement exactly what I ask for
+- Build and verify compilation
+- Help debug Phase 2 socket issues with console output analysis
+- Wait for my testing feedback before moving to the next item
+
+QUICK REFERENCE:
+
+Start POS:
+./gradlew run
+
+Socket Configuration Location:
+Settings (gear icon) → Socket Configuration button
+
+Socket Ports:
+- Discovery: UDP 9999 (auto-discovery broadcasts)
+- Server: TCP 9000, 9001, 9002, etc. (configurable per POS)
+
+Debug Console Output to Watch For:
+✅ "DEBUG: Server started successfully on port 9000"
+✅ "DEBUG: Discovery started successfully"
+✅ "DEBUG: Sent discovery broadcast - Counter-1 on port 9000"
+✅ "DEBUG: Received UDP broadcast from 127.0.0.1"
+✅ "DEBUG: New POS discovered - Counter-2 at 127.0.0.1:9001"
+✅ "DEBUG: Successfully connected to Counter-2"
+✅ GREEN console text for LOCAL journal entries
+✅ BLUE/YELLOW console text for remote POS entries
+
+Documentation Files:
+- PHASE2_IMPLEMENTATION.md (technical details)
+- PHASE2_QUICK_START.md (step-by-step testing guide)
+- SOCKET_DIAGNOSTIC.md (troubleshooting guide)
+- HANDOFF_PROMPT.md (detailed project context)
+
+Let's continue testing and debugging Phase 2, or move to the next feature based on your direction!
