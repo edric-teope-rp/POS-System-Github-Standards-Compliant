@@ -1,0 +1,52 @@
+{
+  "posName": "Counter-1",
+  "serverPort": 9001,
+  "autoStartServer": false,
+  "savedConnections": [
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 8765
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.119",
+      "port": 7778
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 8765
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.110",
+      "port": 8888
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.119",
+      "port": 7778
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    }
+  ]
+}
