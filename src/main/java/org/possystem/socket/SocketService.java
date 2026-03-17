@@ -35,6 +35,7 @@ public class SocketService {
     private ServerSocket serverSocket;
     private boolean serverRunning;
     private final Set<ClientHandler> connectedClients = ConcurrentHashMap.newKeySet();
+    private final Map<String, ConnectedClientInfo> clientHistory = new ConcurrentHashMap<>();
 
     // Client connections
     private final Map<String, ClientConnection> activeConnections = new ConcurrentHashMap<>();
@@ -89,6 +90,11 @@ public class SocketService {
                         connectedClients.add(handler);
                         executorService.submit(handler);
                         String clientIp = clientSocket.getInetAddress().getHostAddress();
+
+                        // Add to client history
+                        ConnectedClientInfo clientInfo = new ConnectedClientInfo(clientIp, handler.getConnectedAt(), true, null);
+                        clientHistory.put(clientIp, clientInfo);
+
                         logger.info("Client connected: {}", clientIp);
                         notifyServerClientConnected(clientIp, handler.getConnectedAt());
                     } catch (IOException e) {
@@ -121,6 +127,7 @@ public class SocketService {
                 handler.close();
             }
             connectedClients.clear();
+            clientHistory.clear(); // Clear client history on server stop
 
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
@@ -243,6 +250,14 @@ public class SocketService {
                     socket.close();
                 }
                 connectedClients.remove(this);
+
+                // Update client history to show disconnected
+                ConnectedClientInfo clientInfo = clientHistory.get(ipAddress);
+                if (clientInfo != null) {
+                    clientInfo.setConnected(false);
+                    clientInfo.setDisconnectedAt(LocalDateTime.now());
+                }
+
                 notifyServerClientDisconnected(ipAddress);
             } catch (IOException e) {
                 logger.error("Error closing client connection", e);
@@ -720,17 +735,10 @@ public class SocketService {
     }
 
     /**
-     * Get list of clients connected to this server
+     * Get list of clients connected to this server (including disconnected clients)
      */
     public List<ConnectedClientInfo> getConnectedClientsList() {
-        List<ConnectedClientInfo> clients = new ArrayList<>();
-        for (ClientHandler handler : connectedClients) {
-            clients.add(new ConnectedClientInfo(
-                handler.getIpAddress(),
-                handler.getConnectedAt()
-            ));
-        }
-        return clients;
+        return new ArrayList<>(clientHistory.values());
     }
 
     // ==================== Shutdown ====================
@@ -778,10 +786,14 @@ public class SocketService {
     public static class ConnectedClientInfo {
         private final String ipAddress;
         private final LocalDateTime connectedAt;
+        private boolean connected;
+        private LocalDateTime disconnectedAt;
 
-        public ConnectedClientInfo(String ipAddress, LocalDateTime connectedAt) {
+        public ConnectedClientInfo(String ipAddress, LocalDateTime connectedAt, boolean connected, LocalDateTime disconnectedAt) {
             this.ipAddress = ipAddress;
             this.connectedAt = connectedAt;
+            this.connected = connected;
+            this.disconnectedAt = disconnectedAt;
         }
 
         public String getIpAddress() {
@@ -790,6 +802,22 @@ public class SocketService {
 
         public LocalDateTime getConnectedAt() {
             return connectedAt;
+        }
+
+        public boolean isConnected() {
+            return connected;
+        }
+
+        public void setConnected(boolean connected) {
+            this.connected = connected;
+        }
+
+        public LocalDateTime getDisconnectedAt() {
+            return disconnectedAt;
+        }
+
+        public void setDisconnectedAt(LocalDateTime disconnectedAt) {
+            this.disconnectedAt = disconnectedAt;
         }
     }
 }

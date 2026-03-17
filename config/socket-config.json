@@ -1,5 +1,5 @@
 {
-  "posName": "Counter-1",
+  "posName": "Local",
   "serverPort": 9001,
   "autoStartServer": false,
   "savedConnections": [
@@ -45,6 +45,41 @@
     },
     {
       "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9090
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9090
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
       "ipAddress": "192.168.8.186",
       "port": 9000
     }

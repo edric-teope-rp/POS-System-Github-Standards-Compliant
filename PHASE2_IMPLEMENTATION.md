@@ -395,14 +395,23 @@ logs/
 ✅ **Active Clients Monitoring** - Real-time display of connected clients
 ✅ **Manual Connection Display** - Proper table integration for manual connections
 
-## Future Enhancements (Not Yet Implemented)
+## Current Focus: Phase 2 UI & Functionality Polish 🔧
+
+We are now focusing on polishing the Socket Configuration Dialog and overall Phase 2 experience:
+- Improving UI/UX of Socket Configuration Dialog
+- Enhancing visual presentation and layout
+- Refining user workflows and interactions
+- Adding quality-of-life improvements
+- Testing edge cases and improving error handling
+
+## Future Enhancements (Potential Ideas)
 
 - Authentication/encryption for secure connections
 - Journal filtering by POS, date range, or action type
 - Real-time statistics dashboard (transactions per minute, etc.)
 - Alert notifications for specific events
 - Journal search functionality
-- Socket Configuration UI polish (current focus)
+- Export journals to CSV/Excel
 
 ## Technical Notes
 
@@ -425,12 +434,11 @@ logs/
 
 ## Summary
 
-**Status:** ✅ Phase 2 Complete, Enhanced & Fully Tested
-**Branch:** v1.7-keyboard-polish
+**Status:** 🔧 Phase 2 Core Complete - Now Polishing UI & Functionality
 **Build:** Successful
-**Production Ready:** YES
+**Core Features:** ✅ Production Ready
 
-### What Works:
+### What Works (Core Features):
 - ✅ Real-time journal broadcasting to multiple POS systems
 - ✅ UDP auto-discovery of POS systems on network
 - ✅ Manual connection with IP:Port
@@ -451,4 +459,18 @@ logs/
 - ✅ Connection cleanup tested
 - ✅ Network connectivity verified
 
-**Next Phase:** Socket Configuration UI polish, then Phase 3 (Discount Service)
+### Current Work:
+- 🔧 Phase 2 UI & Functionality Polish (in progress)
+- Improving Socket Configuration Dialog UX
+- Enhancing visual presentation
+- Refining user workflows
+
+### Next Steps After Phase 2 Polish:
+**Option A:** Phase 1 Deferred Items (non-essential)
+  - Lock Screen idle display
+  - Theme modes (Light, Dark, Auto, Low Attention Span)
+
+**Option B:** Phase 3 - Discount Service
+  - New Spring Boot project (separate)
+  - REST API for discount calculations
+  - Integration with this POS via HTTP REST calls

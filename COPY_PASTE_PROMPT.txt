@@ -11,9 +11,10 @@ CURRENT STATE:
 
 PROJECT ROADMAP (3 PHASES):
 
-PHASE 1: Standalone POS System ✅ COMPLETE
-  Component 1: Lock Screen
-    - Status: ❌ Deferred (will implement later)
+PHASE 1: Standalone POS System ✅ MOSTLY COMPLETE
+  Component 1: Lock Screen ❌ DEFERRED (Non-Essential)
+    - Idle lock screen display
+    - Status: Will implement after Phase 2 polish (if desired)
 
   Component 2: POS Interface ✅ COMPLETE
     - Main transaction interface (Quick Keys, Current Sale, Actions zones)
@@ -26,24 +27,40 @@ PHASE 1: Standalone POS System ✅ COMPLETE
     - Receipt display with custom styling
     - "New Transaction" button flow
 
-PHASE 2: Multi-POS Journal Viewer ✅ COMPLETE & FULLY TESTED
-  - Java socket server/client architecture (bidirectional)
-  - UDP broadcast auto-discovery (port 9999)
-  - Real-time journal synchronization
-  - Hybrid protocol support (JSON + Pipe-delimited formats)
-  - Dead connection cleanup (automatic zombie client removal)
-  - Active clients monitoring (see who's connected to your server)
-  - Remote journal storage: logs/remote-journals/[POS-NAME]/journal.log
-  - Console color-coding (GREEN for local, BLUE/YELLOW/etc for remote)
-  - Socket Configuration Dialog UI with Active Clients section
-  - Manual connection support (IP:Port) with proper table display
-  - Connection persistence (saved to config/socket-config.json)
-  - Status: ✅ Fully Implemented & Tested | ✅ Production Ready
+  Component 4: Theme Modes ❌ DEFERRED (Non-Essential)
+    - Light Mode (not yet implemented)
+    - Dark Mode (not yet implemented)
+    - Auto Mode (not yet implemented)
+    - Low Attention Span Mode (not yet implemented)
+    - Status: Will implement after Phase 2 polish (if desired)
 
-PHASE 3: Discount Service (Spring Boot Microservice)
-  - Status: ❌ Not started (future work)
+PHASE 2: Multi-POS Journal Viewer 🔧 POLISH IN PROGRESS
+  Core Features: ✅ COMPLETE & FULLY TESTED
+    - Java socket server/client architecture (bidirectional)
+    - UDP broadcast auto-discovery (port 9999)
+    - Real-time journal synchronization
+    - Hybrid protocol support (JSON + Pipe-delimited formats)
+    - Dead connection cleanup (automatic zombie client removal)
+    - Active clients monitoring (see who's connected to your server)
+    - Remote journal storage: logs/remote-journals/[POS-NAME]/journal.log
+    - Console color-coding (GREEN for local, BLUE/YELLOW/etc for remote)
+    - Socket Configuration Dialog UI with Active Clients section
+    - Manual connection support (IP:Port) with proper table display
+    - Connection persistence (saved to config/socket-config.json)
 
-CURRENT FOCUS: Polishing Socket Configuration UI (Phase 2 complete and tested)
+  Current Focus: 🔧 UI & Functionality Polish
+    - Improving Socket Configuration Dialog UX
+    - Enhancing visual presentation
+    - Refining user workflows
+    - Additional features as needed
+
+PHASE 3: Discount Service (Spring Boot REST API) ❌ NOT STARTED
+  - New Spring Boot project (separate from this Java Swing app)
+  - REST API endpoints for discount calculations
+  - This POS will connect via HTTP REST calls
+  - Status: Will start after Phase 2 is fully polished
+
+CURRENT FOCUS: Phase 2 UI & Functionality Polish (Phase 2 core features complete and tested)
 
 WHAT WE'VE COMPLETED:
 
@@ -110,7 +127,8 @@ v2.0 - Phase 2: Multi-POS Journal Viewer (COMPLETE):
 ✅ Console color coding:
    - GREEN for LOCAL entries
    - BLUE/YELLOW/MAGENTA/CYAN/RED for remote POS (rotated)
-   - Format: YYYY-MM-DD HH:mm:ss.SSS|POS-NAME (IP)|ACTION|DETAILS
+   - Display Format (Console/Viewer): POS-NAME (IP)|YYYY-MM-DD HH:mm:ss.SSS|ACTION|DETAILS
+   - Stored Journal Format: YYYY-MM-DD HH:mm:ss.SSS|ACTION|DETAILS
 ✅ Configuration persistence:
    - Saved to config/socket-config.json
    - Manual connections persisted (not auto-connected)
@@ -255,6 +273,29 @@ IMPORTANT NOTES:
 ✅ All dialogs are undecorated and moveable by header drag
 ✅ Socket connections persist but don't auto-connect on restart
 
+PERSONALIZED DIALOG PATTERN:
+⚠️ CRITICAL: Always use personalized dialogs instead of JOptionPane for consistency
+✅ All UI dialogs (ActionsPanel, QuickKeysPanel, SocketConfigDialog) use custom "personalized" dialogs
+✅ Pattern: Undecorated dialog with colored header, draggable by header, centered details, rounded buttons
+✅ Dialog types with corresponding header colors:
+   - showErrorDialog()   → Red header (220, 53, 69)
+   - showSuccessDialog() → Green header (40, 167, 69)
+   - showInfoDialog()    → Blue header (23, 162, 184)
+   - showWarningDialog() → Amber header (255, 193, 7)
+✅ All dialogs have:
+   - setUndecorated(true) + setResizable(false)
+   - APPLICATION_MODAL
+   - BorderLayout with 3 sections: NORTH (colored header), CENTER (white details), SOUTH (buttons)
+   - Header draggable via mouse listeners
+   - Responsive font scaling based on screen resolution (1080p baseline)
+   - applyRoundedStyle() for buttons
+   - setLocationRelativeTo() for centering
+✅ Method signature: showXDialog(String title, String message, String details)
+   - title = dialog window title
+   - message = bold white text in colored header
+   - details = body text in center panel (supports HTML <br> tags)
+❌ NEVER use JOptionPane.showMessageDialog() - always create personalized dialogs instead
+
 COMMUNICATION PROTOCOL:
 ⚠️ IMPORTANT: If my prompt starts AND ends with a "?" (question mark), it means I'm asking for your opinion or suggestions FIRST before implementing any code changes. Do NOT make code changes until I confirm which approach to take.
 
@@ -316,11 +357,18 @@ MY PREFERENCES:
 
 SESSION START INSTRUCTIONS:
 1. Confirm you see the project at /Users/ed/IdeaProjects/POSSystem
-2. Verify current branch is v1.7-keyboard-polish
-3. Confirm build is successful (./gradlew build)
-4. Acknowledge you understand the step-by-step approach and the "?" protocol
-5. Phase 2 is COMPLETE and TESTED - ready for Phase 3 or UI polish
-6. Wait for me to provide the next task or direction
+2. Check current branch (may vary based on work in progress)
+3. Read PHASE2_IMPLEMENTATION.md for complete Phase 2 technical details
+4. Confirm build is successful (./gradlew build)
+5. Acknowledge you understand the step-by-step approach and the "?" protocol
+6. Current priority: Phase 2 UI & Functionality Polish
+7. Wait for me to provide the next task or direction
+
+ROADMAP PRIORITIES:
+1. 🔧 NOW: Phase 2 UI & Functionality Polish (current focus)
+2. ⏭️  NEXT: Either Phase 1 deferred items OR Phase 3 (Spring Boot REST API)
+3. 📝 Phase 1 Deferred (non-essential): Lock Screen idle display, Theme modes
+4. 📝 Phase 3: Separate Spring Boot project with REST API for discount service
 
 DO NOT:
 - Run the application automatically
@@ -359,9 +407,14 @@ Debug Console Output to Watch For:
 ✅ BLUE/YELLOW console text for remote POS entries
 
 Documentation Files:
-- PHASE2_IMPLEMENTATION.md (technical details)
+- PHASE2_IMPLEMENTATION.md (technical details and current status)
 - PHASE2_QUICK_START.md (step-by-step testing guide)
 - SOCKET_DIAGNOSTIC.md (troubleshooting guide)
 - HANDOFF_PROMPT.md (detailed project context)
 
-Let's continue testing and debugging Phase 2, or move to the next feature based on your direction!
+WORK PRIORITIES SUMMARY:
+🔧 CURRENT: Phase 2 UI & Functionality Polish
+⏭️  LATER: Phase 1 deferred items (Lock Screen, Theme Modes) OR Phase 3 (Spring Boot REST API)
+📝 NOTE: Phase 3 will be a separate Spring Boot project with REST endpoints
+
+Ready to polish Phase 2 based on your direction!
