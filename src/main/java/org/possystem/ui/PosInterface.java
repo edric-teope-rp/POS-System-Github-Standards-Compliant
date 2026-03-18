@@ -18,6 +18,7 @@ public class PosInterface extends JFrame {
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
     private final SocketService socketService;
+    private final GlobalBarcodeScanner globalScanner;
 
     // UI Panels
     private QuickKeysPanel quickKeysPanel;
@@ -32,6 +33,14 @@ public class PosInterface extends JFrame {
         // Wire socket service to transaction service for journal broadcasting
         this.transactionService.setSocketService(socketService);
 
+        // Initialize global barcode scanner
+        this.globalScanner = new GlobalBarcodeScanner(
+            priceBookService,
+            this::handleScannedItem,
+            this::handleScanSuccess,
+            this::handleScanError
+        );
+
         setupFrame();
         initializeComponents();
         layoutComponents();
@@ -44,6 +53,9 @@ public class PosInterface extends JFrame {
         }
 
         refreshSaleDisplay();
+
+        // Start global barcode scanner
+        globalScanner.start();
     }
 
     private void setupFrame() {
@@ -58,6 +70,8 @@ public class PosInterface extends JFrame {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
                 if (showCloseConfirmDialog()) {
+                    // Stop global scanner
+                    globalScanner.stop();
                     // Shutdown socket service gracefully
                     socketService.shutdown();
                     dispose();
@@ -73,8 +87,6 @@ public class PosInterface extends JFrame {
             try {
                 transactionService.addItem(item.upc(), item.name(), item.price());
                 refreshSaleDisplay();
-                // Return focus to barcode scanner after adding item
-                actionsPanel.returnFocusToScanner();
             } catch (SQLException e) {
                 showError("Failed to add item: " + e.getMessage());
             }
@@ -639,7 +651,6 @@ public class PosInterface extends JFrame {
         if (rowSelectedId == null) {
             JOptionPane.showMessageDialog(this, "No items selected", "Info",
                 JOptionPane.INFORMATION_MESSAGE);
-            actionsPanel.returnFocusToScanner();
             return;
         }
 
@@ -660,9 +671,6 @@ public class PosInterface extends JFrame {
                 showError("Failed to delete items: " + e.getMessage());
             }
         }
-
-        // Return focus to scanner after dialog closes (whether Yes or No)
-        actionsPanel.returnFocusToScanner();
     }
 
     private void handleChangeQuantity() {
@@ -673,7 +681,6 @@ public class PosInterface extends JFrame {
                 "No item selected.\n\nPlease select an item from the cart to change its quantity.",
                 "No Selection",
                 JOptionPane.INFORMATION_MESSAGE);
-            actionsPanel.returnFocusToScanner();
             return;
         }
 
@@ -690,7 +697,6 @@ public class PosInterface extends JFrame {
 
             if (selectedItem == null) {
                 showError("Selected item not found");
-                actionsPanel.returnFocusToScanner();
                 return;
             }
 
@@ -708,7 +714,6 @@ public class PosInterface extends JFrame {
 
                 // User cancelled
                 if (input == null) {
-                    actionsPanel.returnFocusToScanner();
                     return;
                 }
 
@@ -740,12 +745,8 @@ public class PosInterface extends JFrame {
                 }
             }
 
-            // Return focus to barcode scanner after successful update
-            actionsPanel.returnFocusToScanner();
-
         } catch (SQLException e) {
             showError("Failed to change quantity: " + e.getMessage());
-            actionsPanel.returnFocusToScanner();
         }
     }
 
@@ -755,6 +756,9 @@ public class PosInterface extends JFrame {
 
         // Disable Current Sale editing (quantity controls, delete buttons)
         currentSalePanel.setEditingEnabled(false);
+
+        // Disable global barcode scanner
+        globalScanner.disableFinalized();
     }
 
     private void handleTransactionResumed() {
@@ -763,6 +767,46 @@ public class PosInterface extends JFrame {
 
         // Re-enable Current Sale editing (quantity controls, delete buttons)
         currentSalePanel.setEditingEnabled(true);
+
+        // Re-enable global barcode scanner
+        globalScanner.enable();
+    }
+
+    /**
+     * Global scanner callback - Item successfully scanned
+     */
+    private void handleScannedItem(org.possystem.entity.PriceBook item) {
+        try {
+            transactionService.addItem(item.upc(), item.name(), item.price());
+            refreshSaleDisplay();
+        } catch (SQLException e) {
+            showError("Failed to add item: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Global scanner callback - Scan success (show indicator)
+     */
+    private void handleScanSuccess() {
+        actionsPanel.showScanIndicator();
+    }
+
+    /**
+     * Global scanner callback - Scan error (item not found)
+     */
+    private void handleScanError(String errorMessage) {
+        // Check if it's a "not found" error (contains UPC)
+        if (!errorMessage.startsWith("Database error")) {
+            // Item not found - show warning dialog
+            actionsPanel.showWarningDialog(
+                "Product Not Found",
+                "Item Not in System",
+                "The scanned barcode does not match any item in the system.<br><br><b>Scanned Code:</b> " + errorMessage
+            );
+        } else {
+            // Database error
+            showError(errorMessage);
+        }
     }
 
     private boolean showConfirmDialog(String title, String message, String details) {
@@ -866,7 +910,19 @@ public class PosInterface extends JFrame {
     }
 
     private void showSocketConfigDialog() {
+        // Disable barcode scanner while socket config dialog is open
+        globalScanner.disableForDialog();
+
         SocketConfigDialog dialog = new SocketConfigDialog(this, socketService);
+
+        // Re-enable scanner when dialog closes
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                globalScanner.enable();
+            }
+        });
+
         dialog.setVisible(true);
     }
 
@@ -1130,7 +1186,13 @@ public class PosInterface extends JFrame {
 
         inputDialog.add(buttonPanel, BorderLayout.SOUTH);
 
+        // Disable barcode scanner while dialog is open
+        globalScanner.disableForDialog();
+
         inputDialog.setVisible(true);
+
+        // Re-enable barcode scanner after dialog closes
+        globalScanner.enable();
 
         return userInput[0];
     }
