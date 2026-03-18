@@ -155,11 +155,11 @@ public class RemoteJournalEntry implements Comparable<RemoteJournalEntry> {
     }
 
     /**
-     * Format for display with POS name prefix
+     * Format for display with POS name prefix (for console and Live Journal Viewer)
      */
     public String toDisplayString() {
         String prefix = isLocal ? "LOCAL" : (posName + " (" + ipAddress + ")");
-        return timestamp.format(FORMATTER) + "|" + prefix + "|" + action + "|" + details;
+        return prefix + "|" + timestamp.format(FORMATTER) + "|" + action + "|" + details;
     }
 
     // Getters
