@@ -82,6 +82,26 @@
       "posName": "Thomas",
       "ipAddress": "192.168.8.186",
       "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9091
     }
   ]
 }

@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SocketConfigDialog extends JDialog {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    private final Frame parentFrame;
     private final SocketService socketService;
 
     // Dynamic font scaling based on screen resolution
@@ -52,6 +53,7 @@ public class SocketConfigDialog extends JDialog {
     // Live Journal Viewer
     private JTextArea journalViewer;
     private JScrollPane journalScrollPane;
+    private PinnedJournalViewerWindow pinnedWindow;
 
     // Color mapping for POS systems
     private final Map<String, Color> posColors = new ConcurrentHashMap<>();
@@ -67,6 +69,7 @@ public class SocketConfigDialog extends JDialog {
 
     public SocketConfigDialog(Frame parent, SocketService socketService) {
         super(parent, "Socket Configuration", Dialog.ModalityType.MODELESS);
+        this.parentFrame = parent;
         this.socketService = socketService;
 
         // Calculate font scaling based on screen resolution
@@ -454,6 +457,16 @@ public class SocketConfigDialog extends JDialog {
 
         // Toolbar
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        // Pin Button
+        JButton pinButton = new JButton("📌 Pin");
+        pinButton.setBackground(new Color(40, 167, 69));  // Green
+        pinButton.setForeground(Color.WHITE);
+        pinButton.setFont(new Font("Arial", Font.BOLD, titleFontSize));
+        applyRoundedStyle(pinButton);
+        pinButton.addActionListener(e -> togglePinnedWindow());
+        toolbar.add(pinButton);
+
         JButton clearButton = new JButton("Clear");
         clearButton.setBackground(new Color(220, 53, 69));  // Red
         clearButton.setForeground(Color.WHITE);
@@ -971,6 +984,54 @@ public class SocketConfigDialog extends JDialog {
                         "Failed to export journal:<br>" + e.getMessage()
                 );
             }
+        }
+    }
+
+    /**
+     * Toggle pinned journal viewer window
+     */
+    private void togglePinnedWindow() {
+        System.out.println("DEBUG: togglePinnedWindow called. Current state: pinnedWindow=" + pinnedWindow + ", visible=" + (pinnedWindow != null && pinnedWindow.isVisible()));
+
+        if (pinnedWindow == null || !pinnedWindow.isVisible()) {
+            // Create and show pinned window
+            System.out.println("DEBUG: Creating new PinnedJournalViewerWindow...");
+            pinnedWindow = new PinnedJournalViewerWindow(parentFrame, socketService);
+
+            // Position pinned window so its bottom aligns with the bottom of the Current Sale table
+            // (just before the subtotal section)
+            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+            int windowHeight = pinnedWindow.getHeight();
+
+            // Current Sale totals panel height estimation:
+            // - 3 labels: subtotal (18pt ~25px), tax (18pt ~25px), total (22pt ~30px)
+            // - 2 gaps of 5px
+            // - Top/bottom padding: 10px each
+            // Total: ~110px
+            int totalsHeight = 110;
+
+            // Calculate Y position so bottom of window aligns with bottom of table
+            int yPosition = screenSize.height - totalsHeight - windowHeight;
+
+            // X position: slightly to the left (at the edge of screen or with small padding)
+            int xPosition = 10; // 10px padding from left edge
+
+            pinnedWindow.setLocation(xPosition, yPosition);
+            System.out.println("DEBUG: Set pinnedWindow location to: (" + xPosition + ", " + yPosition + ") - bottom aligns with Current Sale table");
+
+            pinnedWindow.setVisible(true);
+            System.out.println("DEBUG: Called setVisible(true) on pinnedWindow. IsVisible: " + pinnedWindow.isVisible());
+
+            // Ensure Socket Configuration Dialog stays on top of the pinned window
+            this.toFront();
+            System.out.println("DEBUG: Brought Socket Configuration Dialog to front");
+
+            System.out.println("DEBUG: Pinned Journal Viewer opened aligned with Current Sale table");
+        } else {
+            // Close existing pinned window
+            System.out.println("DEBUG: Hiding existing pinned window");
+            pinnedWindow.setVisible(false);
+            System.out.println("DEBUG: Pinned Journal Viewer hidden");
         }
     }
 
