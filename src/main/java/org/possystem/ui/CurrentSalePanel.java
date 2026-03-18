@@ -5,7 +5,6 @@ import org.possystem.service.TransactionService;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
-import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.sql.SQLException;
@@ -19,7 +18,6 @@ public class CurrentSalePanel extends JPanel {
 
     private final TransactionService transactionService;
     private final Runnable onSelectionChanged;
-    private Runnable onQuantityFieldClicked; // Callback when quantity field is clicked
 
     private boolean editingEnabled = true; // Track if editing is allowed
     private JTable saleTable;
@@ -78,62 +76,14 @@ public class CurrentSalePanel extends JPanel {
         });
 
         // Set column widths (proportional to 42% screen width)
-        saleTable.getColumnModel().getColumn(0).setPreferredWidth(48);  // Checkbox
-        saleTable.getColumnModel().getColumn(1).setPreferredWidth(305); // Name
-        saleTable.getColumnModel().getColumn(2).setPreferredWidth(173); // Qty
-        saleTable.getColumnModel().getColumn(2).setMinWidth(173);
-        saleTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Price
-        saleTable.getColumnModel().getColumn(4).setPreferredWidth(110); // Line Total
-        saleTable.getColumnModel().getColumn(5).setPreferredWidth(58);  // Delete
-        saleTable.getColumnModel().getColumn(5).setMaxWidth(58);
+        saleTable.getColumnModel().getColumn(0).setPreferredWidth(408); // Name
+        saleTable.getColumnModel().getColumn(1).setPreferredWidth(70); // Qty
+        saleTable.getColumnModel().getColumn(1).setMinWidth(60);
+        saleTable.getColumnModel().getColumn(2).setPreferredWidth(100); // Price
+        saleTable.getColumnModel().getColumn(3).setPreferredWidth(110); // Line Total
 
-        // Set custom header renderer for select all checkbox
-        saleTable.getColumnModel().getColumn(0).setHeaderRenderer(new SelectAllHeaderRenderer());
-        saleTable.getTableHeader().addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                int column = saleTable.columnAtPoint(e.getPoint());
-                if (column == 0) {
-                    toggleSelectAll();
-                    saleTable.getTableHeader().repaint();
-                }
-            }
-        });
-
-        // Add mouse listener for single-click delete
-        saleTable.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                int row = saleTable.rowAtPoint(e.getPoint());
-                int column = saleTable.columnAtPoint(e.getPoint());
-
-                // Only allow delete if editing is enabled
-                if (column == 5 && row >= 0 && editingEnabled) {
-                    TransactionItem item = saleTableModel.getItemAt(row);
-                    handleSingleClickDelete(item);
-                }
-            }
-        });
-
-        // Add mouse motion listener to change cursor over delete column
-        saleTable.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-            @Override
-            public void mouseMoved(java.awt.event.MouseEvent e) {
-                int column = saleTable.columnAtPoint(e.getPoint());
-                if (column == 5 && editingEnabled) {
-                    saleTable.setCursor(new Cursor(Cursor.HAND_CURSOR));
-                } else {
-                    saleTable.setCursor(Cursor.getDefaultCursor());
-                }
-            }
-        });
-
-        // Set custom renderers and editors
-        saleTable.getColumnModel().getColumn(0).setCellRenderer(new CheckBoxRenderer());
-        saleTable.getColumnModel().getColumn(0).setCellEditor(new CheckBoxEditor());
-        saleTable.getColumnModel().getColumn(2).setCellRenderer(new QuantityControlRenderer());
-        saleTable.getColumnModel().getColumn(2).setCellEditor(new QuantityControlEditor());
-        saleTable.getColumnModel().getColumn(5).setCellRenderer(new DeleteButtonRenderer());
+        // Set custom renderer for quantity column
+        saleTable.getColumnModel().getColumn(1).setCellRenderer(new QuantityControlRenderer());
 
         // Totals Display
         subtotalLabel = new JLabel("Subtotal: $0.00");
@@ -178,14 +128,6 @@ public class CurrentSalePanel extends JPanel {
         }
     }
 
-    public List<Integer> getSelectedItemIds() {
-        return saleTableModel.getSelectedItemIds();
-    }
-
-    public boolean hasSelection() {
-        return saleTableModel.hasSelection();
-    }
-
     public Integer getRowSelectedItemId() {
         int selectedRow = saleTable.getSelectedRow();
         if (selectedRow >= 0 && selectedRow < saleTableModel.getRowCount()) {
@@ -198,57 +140,19 @@ public class CurrentSalePanel extends JPanel {
         return saleTable.getSelectedRow() >= 0;
     }
 
-    public void setOnQuantityFieldClicked(Runnable callback) {
-        this.onQuantityFieldClicked = callback;
-    }
-
     public void setEditingEnabled(boolean enabled) {
         this.editingEnabled = enabled;
 
-        // Disable/enable the table editing (quantity controls and delete buttons still render, but won't be editable)
-        // We'll prevent editing by making cells non-editable in the table model
+        // Disable/enable the table
         saleTable.setEnabled(enabled);
-
-        // Also disable checkbox selection
-        saleTable.getColumnModel().getColumn(0).setCellEditor(enabled ? new CheckBoxEditor() : null);
 
         // Reset cursor to default when disabled
         if (!enabled) {
             saleTable.setCursor(Cursor.getDefaultCursor());
         }
 
-        // Repaint to show visual changes (especially for delete icons)
+        // Repaint to show visual changes
         saleTable.repaint();
-    }
-
-    private void toggleSelectAll() {
-        boolean newState = !saleTableModel.isAllSelected();
-        saleTableModel.selectAll(newState);
-        saleTable.repaint();
-        saleTable.getTableHeader().repaint();
-        if (onSelectionChanged != null) {
-            onSelectionChanged.run();
-        }
-    }
-
-    private void handleSingleClickDelete(TransactionItem item) {
-        // Create custom confirmation dialog
-        boolean confirmed = showConfirmDialog(
-            "Confirm Delete",
-            "Delete Item?",
-            String.format("This action will remove \"%s\" from the current transaction.", item.name())
-        );
-
-        if (confirmed) {
-            try {
-                List<Integer> ids = new ArrayList<>();
-                ids.add(item.id());
-                transactionService.deleteSelectedItems(ids);
-                refreshDisplay();
-            } catch (SQLException e) {
-                showError("Failed to delete item: " + e.getMessage());
-            }
-        }
     }
 
     private void showError(String message) {
@@ -495,36 +399,16 @@ public class CurrentSalePanel extends JPanel {
         });
     }
 
-    // ==== Custom Header Renderer ====
-    private class SelectAllHeaderRenderer extends JCheckBox implements TableCellRenderer {
-        public SelectAllHeaderRenderer() {
-            setHorizontalAlignment(JLabel.CENTER);
-            setOpaque(true);
-            setBackground(UIManager.getColor("TableHeader.background"));
-        }
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                                                       boolean isSelected, boolean hasFocus,
-                                                       int row, int column) {
-            setSelected(saleTableModel != null && saleTableModel.isAllSelected());
-            return this;
-        }
-    }
-
     // ==== Custom Table Model ====
     private class SaleTableModel extends AbstractTableModel {
-        private final String[] columnNames = {"", "Item Name", "Qty", "Price", "Line Total", ""};
+        private final String[] columnNames = {"Item Name", "Qty", "Price", "Line Total"};
         private List<TransactionItem> items = new ArrayList<>();
-        private List<Boolean> selections = new ArrayList<>();
 
         public void setItems(List<TransactionItem> newItems) {
             this.items = new ArrayList<>();
-            this.selections = new ArrayList<>();
             for (TransactionItem item : newItems) {
                 if (item.status().equals("ACTIVE")) {
                     this.items.add(item);
-                    this.selections.add(false);
                 }
             }
             fireTableDataChanged();
@@ -550,107 +434,42 @@ public class CurrentSalePanel extends JPanel {
             if (row >= items.size()) return null;
             TransactionItem item = items.get(row);
             return switch (column) {
-                case 0 -> selections.get(row);
-                case 1 -> item.name();
-                case 2 -> item;
-                case 3 -> String.format("$%.2f", item.unitPrice());
-                case 4 -> String.format("$%.2f", item.subtotal());
-                case 5 -> "🗑";
+                case 0 -> item.name();
+                case 1 -> item;
+                case 2 -> String.format("$%.2f", item.unitPrice());
+                case 3 -> String.format("$%.2f", item.subtotal());
                 default -> null;
             };
         }
 
         @Override
         public boolean isCellEditable(int row, int column) {
-            return column == 0 || column == 2;
-        }
-
-        @Override
-        public void setValueAt(Object value, int row, int column) {
-            if (column == 0) {
-                selections.set(row, (Boolean) value);
-                fireTableCellUpdated(row, column);
-                saleTable.getTableHeader().repaint();
-                if (onSelectionChanged != null) {
-                    onSelectionChanged.run();
-                }
-            }
+            return false;
         }
 
         @Override
         public Class<?> getColumnClass(int column) {
-            if (column == 0) return Boolean.class;
-            if (column == 2) return TransactionItem.class;
+            if (column == 1) return TransactionItem.class;
             return String.class;
         }
 
         public TransactionItem getItemAt(int row) {
             return items.get(row);
         }
-
-        public List<Integer> getSelectedItemIds() {
-            List<Integer> ids = new ArrayList<>();
-            for (int i = 0; i < items.size(); i++) {
-                if (selections.get(i)) {
-                    ids.add(items.get(i).id());
-                }
-            }
-            return ids;
-        }
-
-        public boolean hasSelection() {
-            return selections.stream().anyMatch(selected -> selected);
-        }
-
-        public boolean isAllSelected() {
-            if (selections.isEmpty()) return false;
-            return selections.stream().allMatch(selected -> selected);
-        }
-
-        public void selectAll(boolean selected) {
-            for (int i = 0; i < selections.size(); i++) {
-                selections.set(i, selected);
-            }
-            fireTableDataChanged();
-        }
     }
 
     // ==== Custom Cell Renderers ====
-    private class CheckBoxRenderer extends JCheckBox implements TableCellRenderer {
-        public CheckBoxRenderer() {
-            setHorizontalAlignment(JLabel.CENTER);
-        }
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                                                       boolean isSelected, boolean hasFocus,
-                                                       int row, int column) {
-            setSelected(value != null && (Boolean) value);
-            return this;
-        }
-    }
-
     private class QuantityControlRenderer extends JPanel implements TableCellRenderer {
-        private final JButton minusBtn;
         private final JLabel qtyLabel;
-        private final JButton plusBtn;
 
         public QuantityControlRenderer() {
             setLayout(new FlowLayout(FlowLayout.CENTER, 5, 2));
-            minusBtn = new JButton("-");
-            minusBtn.setPreferredSize(new Dimension(40, 30));
-            minusBtn.setFont(new Font("Arial", Font.BOLD, 16));
             qtyLabel = new JLabel("1");
             qtyLabel.setPreferredSize(new Dimension(40, 30));
             qtyLabel.setHorizontalAlignment(JLabel.CENTER);
             qtyLabel.setFont(new Font("Arial", Font.PLAIN, 16));
-            plusBtn = new JButton("+");
-            plusBtn.setPreferredSize(new Dimension(40, 30));
-            plusBtn.setFont(new Font("Arial", Font.BOLD, 16));
 
-            add(minusBtn);
             add(qtyLabel);
-            add(plusBtn);
         }
 
         @Override
@@ -660,146 +479,18 @@ public class CurrentSalePanel extends JPanel {
             if (value instanceof TransactionItem item) {
                 qtyLabel.setText(String.valueOf(item.quantity()));
             }
+
+            // Match table cell background colors
+            if (isSelected) {
+                setBackground(table.getSelectionBackground());
+                qtyLabel.setForeground(table.getSelectionForeground());
+            } else {
+                setBackground(table.getBackground());
+                qtyLabel.setForeground(table.getForeground());
+            }
+
             return this;
         }
     }
 
-    private class DeleteButtonRenderer extends JPanel implements TableCellRenderer {
-        private final Color trashRed = new Color(220, 53, 69);
-        private final Color trashGray = new Color(160, 160, 160);
-
-        public DeleteButtonRenderer() {
-            setOpaque(false);
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            Graphics2D g2d = (Graphics2D) g.create();
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            int width = getWidth();
-            int height = getHeight();
-            int iconSize = 20;
-            int x = (width - iconSize) / 2;
-            int y = (height - iconSize) / 2;
-
-            // Use gray if editing is disabled, red if enabled
-            g2d.setColor(editingEnabled ? trashRed : trashGray);
-            g2d.setStroke(new BasicStroke(2));
-
-            g2d.drawRect(x + 3, y + 6, 14, 12);
-            g2d.drawLine(x + 2, y + 5, x + 18, y + 5);
-            g2d.drawRect(x + 7, y + 2, 6, 3);
-            g2d.drawLine(x + 7, y + 9, x + 7, y + 15);
-            g2d.drawLine(x + 10, y + 9, x + 10, y + 15);
-            g2d.drawLine(x + 13, y + 9, x + 13, y + 15);
-
-            g2d.dispose();
-        }
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                                                       boolean isSelected, boolean hasFocus,
-                                                       int row, int column) {
-            return this;
-        }
-    }
-
-    // ==== Custom Cell Editors ====
-    private class CheckBoxEditor extends javax.swing.DefaultCellEditor {
-        public CheckBoxEditor() {
-            super(new JCheckBox());
-            ((JCheckBox) getComponent()).setHorizontalAlignment(JLabel.CENTER);
-        }
-    }
-
-    private class QuantityControlEditor extends javax.swing.AbstractCellEditor implements TableCellEditor {
-        private final JPanel panel;
-        private final JButton minusBtn;
-        private final JTextField qtyField;
-        private final JButton plusBtn;
-        private TransactionItem currentItem;
-
-        public QuantityControlEditor() {
-            panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
-
-            minusBtn = new JButton("-");
-            minusBtn.setPreferredSize(new Dimension(40, 30));
-            minusBtn.setFont(new Font("Arial", Font.BOLD, 16));
-            minusBtn.addActionListener(e -> adjustQuantity(-1));
-
-            qtyField = new JTextField(3);
-            qtyField.setHorizontalAlignment(JTextField.CENTER);
-            qtyField.setPreferredSize(new Dimension(40, 30));
-            qtyField.setFont(new Font("Arial", Font.PLAIN, 16));
-            qtyField.setEditable(false); // Read-only - click on quantity area opens numeric keypad dialog
-            qtyField.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-            plusBtn = new JButton("+");
-            plusBtn.setPreferredSize(new Dimension(40, 30));
-            plusBtn.setFont(new Font("Arial", Font.BOLD, 16));
-            plusBtn.addActionListener(e -> adjustQuantity(1));
-
-            panel.add(minusBtn);
-            panel.add(qtyField);
-            panel.add(plusBtn);
-        }
-
-        @Override
-        public Component getTableCellEditorComponent(JTable table, Object value,
-                                                     boolean isSelected, int row, int column) {
-            if (value instanceof TransactionItem item) {
-                currentItem = item;
-                qtyField.setText(String.valueOf(item.quantity()));
-
-                // Open keyboard dialog immediately on first click
-                if (editingEnabled && onQuantityFieldClicked != null) {
-                    SwingUtilities.invokeLater(() -> {
-                        // Stop editing this cell
-                        fireEditingCanceled();
-                        // Trigger the callback to open the dialog
-                        onQuantityFieldClicked.run();
-                    });
-                }
-            }
-            return panel;
-        }
-
-        @Override
-        public Object getCellEditorValue() {
-            return currentItem;
-        }
-
-        private void adjustQuantity(int delta) {
-            if (currentItem == null) return;
-            int currentQty = currentItem.quantity();
-            int newQty = Math.max(1, currentQty + delta);
-            updateQuantity(newQty);
-        }
-
-        private void updateQuantityFromField() {
-            if (currentItem == null) return;
-            try {
-                int newQty = Integer.parseInt(qtyField.getText());
-                if (newQty >= 1) {
-                    updateQuantity(newQty);
-                } else {
-                    qtyField.setText(String.valueOf(currentItem.quantity()));
-                }
-            } catch (NumberFormatException e) {
-                qtyField.setText(String.valueOf(currentItem.quantity()));
-            }
-        }
-
-        private void updateQuantity(int newQty) {
-            try {
-                transactionService.updateQuantity(currentItem.id(), newQty, currentItem.unitPrice());
-                fireEditingStopped();
-                refreshDisplay();
-            } catch (SQLException e) {
-                showError("Failed to update quantity: " + e.getMessage());
-            }
-        }
-    }
 }

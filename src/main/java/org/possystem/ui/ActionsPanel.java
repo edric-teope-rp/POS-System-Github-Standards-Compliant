@@ -108,7 +108,7 @@ public class ActionsPanel extends JPanel {
         voidTransactionButton = new JButton("Void Basket");
         payCashButton = new JButton("Cash");
         payCardButton = new JButton("Card");
-        deleteSelectedButton = new JButton("Void Line/s");
+        deleteSelectedButton = new JButton("Void Item");
         totalButton = new JButton("Total");
 
         // Style action buttons
@@ -197,7 +197,7 @@ public class ActionsPanel extends JPanel {
         JPanel transactionButtonsPanel = new JPanel(new GridLayout(1, 4, 10, 10));
         transactionButtonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        // Add all 4 transaction buttons (Void Line/s -> Void Basket -> Change Qty -> Total)
+        // Add all 4 transaction buttons (Void Item -> Void Basket -> Change Qty -> Total)
         transactionButtonsPanel.add(deleteSelectedButton);
         transactionButtonsPanel.add(voidTransactionButton);
         transactionButtonsPanel.add(changeQtyButton);

@@ -89,9 +89,6 @@ public class PosInterface extends JFrame {
         actionsPanel.setChangeQtyCallback(this::handleChangeQuantity);
         actionsPanel.setTransactionFinalizedCallback(this::handleTransactionFinalized);
         actionsPanel.setTransactionResumedCallback(this::handleTransactionResumed);
-
-        // Wire up quantity field click callback (opens same dialog as Change Qty button)
-        currentSalePanel.setOnQuantityFieldClicked(this::handleChangeQuantity);
     }
 
     private void layoutComponents() {
@@ -568,57 +565,8 @@ public class PosInterface extends JFrame {
         });
         applyRoundedStyle(lowAttentionButton);
 
-        // Socket Configuration Button with wrench icon
-        JButton socketPortButton = new JButton("      Socket Configuration") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                // Calculate text position to place icon right before text
-                FontMetrics fm = g2.getFontMetrics(getFont());
-                String text = "Socket Configuration";
-                int textWidth = fm.stringWidth(text);
-                int buttonWidth = getWidth();
-                int textX = (buttonWidth - textWidth) / 2;
-
-                // Position icon just before the text starts with proper spacing
-                int iconCenterX = textX - 9;
-                int iconCenterY = getHeight() / 2;
-
-                // Wrench handle - grey metallic color
-                g2.setStroke(new BasicStroke(3.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g2.setColor(new Color(180, 180, 190));
-                int handleLength = 12;
-                g2.drawLine(iconCenterX - 6, iconCenterY + 6, iconCenterX + 6, iconCenterY - 6);
-
-                // Wrench head - draw open-ended wrench head
-                g2.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g2.setColor(new Color(200, 200, 210)); // Lighter metallic
-
-                // Top jaw
-                int headX = iconCenterX + 6;
-                int headY = iconCenterY - 6;
-                g2.drawLine(headX, headY, headX + 4, headY - 6);
-
-                // Bottom jaw
-                g2.drawLine(headX, headY, headX + 6, headY - 4);
-
-                // Opening between jaws (U-shape)
-                g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g2.setColor(new Color(220, 220, 230));
-                g2.drawArc(headX - 1, headY - 7, 7, 7, 30, 120);
-
-                // Add orange accent on handle grip
-                g2.setColor(new Color(255, 165, 0));
-                g2.setStroke(new BasicStroke(2f));
-                g2.drawLine(iconCenterX - 4, iconCenterY + 4, iconCenterX - 2, iconCenterY + 2);
-                g2.drawLine(iconCenterX, iconCenterY, iconCenterX + 2, iconCenterY - 2);
-
-                g2.dispose();
-            }
-        };
+        // Socket Configuration Button
+        JButton socketPortButton = new JButton("Socket Configuration");
         socketPortButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
         socketPortButton.setPreferredSize(new Dimension(0, buttonHeight));
         socketPortButton.setBackground(new Color(40, 167, 69));
@@ -678,46 +626,30 @@ public class PosInterface extends JFrame {
     }
 
     private void updateDeleteSelectedButton() {
-        List<Integer> selectedIds = currentSalePanel.getSelectedItemIds();
-        int checkboxSelectionCount = selectedIds.size();
         boolean hasRowSelection = currentSalePanel.hasRowSelection();
 
-        // Enable Delete button if:
-        // - Any checkboxes selected, OR
-        // - No checkboxes selected but a row is selected
-        boolean enableDelete = (checkboxSelectionCount > 0) ||
-                               (checkboxSelectionCount == 0 && hasRowSelection);
-        actionsPanel.setDeleteSelectedEnabled(enableDelete);
-
-        // Enable Change Qty button if:
-        // - Exactly 1 checkbox selected, OR
-        // - No checkboxes selected but a row is selected
-        boolean enableChangeQty = (checkboxSelectionCount == 1) ||
-                                  (checkboxSelectionCount == 0 && hasRowSelection);
-        actionsPanel.setChangeQtyEnabled(enableChangeQty);
+        // Enable Delete and Change Qty buttons only if a row is selected
+        actionsPanel.setDeleteSelectedEnabled(hasRowSelection);
+        actionsPanel.setChangeQtyEnabled(hasRowSelection);
     }
 
     private void handleDeleteSelected() {
-        var selectedIds = currentSalePanel.getSelectedItemIds();
+        Integer rowSelectedId = currentSalePanel.getRowSelectedItemId();
 
-        // If no checkboxes selected, check for row selection
-        if (selectedIds.isEmpty()) {
-            Integer rowSelectedId = currentSalePanel.getRowSelectedItemId();
-            if (rowSelectedId != null) {
-                selectedIds = List.of(rowSelectedId);
-            } else {
-                JOptionPane.showMessageDialog(this, "No items selected", "Info",
-                    JOptionPane.INFORMATION_MESSAGE);
-                actionsPanel.returnFocusToScanner();
-                return;
-            }
+        if (rowSelectedId == null) {
+            JOptionPane.showMessageDialog(this, "No items selected", "Info",
+                JOptionPane.INFORMATION_MESSAGE);
+            actionsPanel.returnFocusToScanner();
+            return;
         }
+
+        List<Integer> selectedIds = List.of(rowSelectedId);
 
         // Create custom confirmation dialog
         boolean confirmed = showConfirmDialog(
             "Confirm Delete",
-            "Delete " + selectedIds.size() + " selected item(s)?",
-            "This action will remove the selected items from the cart."
+            "Delete selected item?",
+            "This action will remove the selected item from the cart."
         );
 
         if (confirmed) {
@@ -734,25 +666,7 @@ public class PosInterface extends JFrame {
     }
 
     private void handleChangeQuantity() {
-        // Try checkbox selection first, then fall back to row selection
-        List<Integer> checkboxSelectedIds = currentSalePanel.getSelectedItemIds();
-        Integer selectedId = null;
-
-        if (!checkboxSelectedIds.isEmpty()) {
-            // Use checkbox selection
-            if (checkboxSelectedIds.size() > 1) {
-                JOptionPane.showMessageDialog(this,
-                    "Multiple items selected.\n\nPlease select only ONE item to change quantity.",
-                    "Multiple Selection",
-                    JOptionPane.WARNING_MESSAGE);
-                actionsPanel.returnFocusToScanner();
-                return;
-            }
-            selectedId = checkboxSelectedIds.get(0);
-        } else {
-            // Fall back to row selection
-            selectedId = currentSalePanel.getRowSelectedItemId();
-        }
+        Integer selectedId = currentSalePanel.getRowSelectedItemId();
 
         if (selectedId == null) {
             JOptionPane.showMessageDialog(this,
