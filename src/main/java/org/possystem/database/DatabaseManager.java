@@ -36,7 +36,8 @@ public class DatabaseManager {
                 name                VARCHAR(100) NOT NULL,
                 price               DOUBLE NOT NULL,
                 is_featured         BOOLEAN DEFAULT FALSE,
-                quick_key_position  INT DEFAULT NULL
+                quick_key_position  INT DEFAULT NULL,
+                has_promotion       BOOLEAN DEFAULT FALSE
             )
         """);
 

@@ -28,10 +28,10 @@ public class CurrentSalePanel extends JPanel {
 
     public static final int MIN_WIDTH = 400;
 
-    // Calculate width as 42% of screen width
+    // Calculate width as 35% of screen width
     private static int calculateWidth() {
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        int calculatedWidth = (int) (screenSize.width * 0.42);
+        int calculatedWidth = (int) (screenSize.width * 0.35);
         // Ensure minimum of 400px
         return Math.max(calculatedWidth, MIN_WIDTH);
     }
@@ -45,7 +45,7 @@ public class CurrentSalePanel extends JPanel {
 
         setLayout(new BorderLayout(5, 5));
         setBorder(BorderFactory.createTitledBorder("Current Sale"));
-        // Fixed width panel - no resizing, but responsive to screen size (42% of screen width)
+        // Fixed width panel - no resizing, but responsive to screen size (35% of screen width)
         setPreferredSize(new Dimension(DEFAULT_WIDTH, 0));
         setMinimumSize(new Dimension(DEFAULT_WIDTH, 0));
         setMaximumSize(new Dimension(DEFAULT_WIDTH, Integer.MAX_VALUE));
@@ -75,7 +75,7 @@ public class CurrentSalePanel extends JPanel {
             }
         });
 
-        // Set column widths (proportional to 42% screen width)
+        // Set column widths (proportional to 35% screen width)
         saleTable.getColumnModel().getColumn(0).setPreferredWidth(408); // Name
         saleTable.getColumnModel().getColumn(1).setPreferredWidth(70); // Qty
         saleTable.getColumnModel().getColumn(1).setMinWidth(60);

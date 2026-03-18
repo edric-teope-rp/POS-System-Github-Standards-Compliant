@@ -32,7 +32,7 @@ public class DataSeeder {
             throw new SQLException("Could not find pricebook.tsv in resources folder");
         }
 
-        String sql = "INSERT INTO price_book (upc, name, price, is_featured, quick_key_position) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO price_book (upc, name, price, is_featured, quick_key_position, has_promotion) VALUES (?, ?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
 
         int productCount = 0;
@@ -53,9 +53,9 @@ public class DataSeeder {
                 // Split by tab character (use -1 limit to preserve trailing empty fields)
                 String[] fields = line.split("\t", -1);
 
-                // Validate line has exactly 5 fields
-                if (fields.length != 5) {
-                    System.err.println("Warning: Skipping line " + lineNumber + " - expected 5 fields, found " + fields.length);
+                // Validate line has exactly 6 fields
+                if (fields.length != 6) {
+                    System.err.println("Warning: Skipping line " + lineNumber + " - expected 6 fields, found " + fields.length);
                     skippedCount++;
                     continue;
                 }
@@ -65,6 +65,7 @@ public class DataSeeder {
                 String priceStr = fields[2].trim();
                 String isFeaturedStr = fields[3].trim();
                 String quickKeyPositionStr = fields[4].trim();
+                String hasPromotionStr = fields[5].trim();
 
                 // Validate and parse fields
                 try {
@@ -74,6 +75,7 @@ public class DataSeeder {
                     if (!quickKeyPositionStr.isEmpty() && !quickKeyPositionStr.equalsIgnoreCase("null")) {
                         quickKeyPosition = Integer.parseInt(quickKeyPositionStr);
                     }
+                    boolean hasPromotion = Boolean.parseBoolean(hasPromotionStr);
 
                     stmt.setString(1, upc);
                     stmt.setString(2, name);
@@ -84,6 +86,7 @@ public class DataSeeder {
                     } else {
                         stmt.setNull(5, java.sql.Types.INTEGER);
                     }
+                    stmt.setBoolean(6, hasPromotion);
                     stmt.addBatch();
                     productCount++;
                 } catch (NumberFormatException e) {

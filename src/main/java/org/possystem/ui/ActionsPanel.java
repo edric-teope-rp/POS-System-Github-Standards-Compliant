@@ -45,6 +45,7 @@ public class ActionsPanel extends JPanel {
     private JButton deleteSelectedButton;
     private JButton totalButton;
     private JButton paymentVoidButton;
+    private JButton discountButton;
 
     public ActionsPanel(PriceBookService priceBookService, TransactionService transactionService,
                        Runnable onSaleRefresh) {
@@ -149,6 +150,13 @@ public class ActionsPanel extends JPanel {
         totalButton.setForeground(Color.WHITE);
         totalButton.setFont(new Font("Arial", Font.BOLD, 16));
 
+        discountButton = new JButton("Discount");
+        discountButton.setBackground(new Color(147, 51, 234)); // Purple/violet
+        discountButton.setOpaque(true);
+        discountButton.setBorderPainted(false);
+        discountButton.setForeground(Color.WHITE);
+        discountButton.setFont(new Font("Arial", Font.BOLD, 14));
+
         // Apply text outlines
         applyTextOutline(changeQtyButton);
         applyTextOutline(voidTransactionButton);
@@ -156,6 +164,7 @@ public class ActionsPanel extends JPanel {
         applyTextOutline(payCardButton);
         applyTextOutline(deleteSelectedButton);
         applyTextOutline(totalButton);
+        applyTextOutline(discountButton);
 
         // Initially disable payment buttons
         payCashButton.setEnabled(false);
@@ -194,13 +203,14 @@ public class ActionsPanel extends JPanel {
         transactionSubZone.add(indicatorContainer, BorderLayout.NORTH);
 
         // Transaction buttons in horizontal layout
-        JPanel transactionButtonsPanel = new JPanel(new GridLayout(1, 4, 10, 10));
+        JPanel transactionButtonsPanel = new JPanel(new GridLayout(1, 5, 10, 10));
         transactionButtonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        // Add all 4 transaction buttons (Void Item -> Void Basket -> Change Qty -> Total)
+        // Add all 5 transaction buttons (Void Item -> Void Basket -> Change Qty -> Discount -> Total)
         transactionButtonsPanel.add(deleteSelectedButton);
         transactionButtonsPanel.add(voidTransactionButton);
         transactionButtonsPanel.add(changeQtyButton);
+        transactionButtonsPanel.add(discountButton);
         transactionButtonsPanel.add(totalButton);
 
         transactionSubZone.add(transactionButtonsPanel, BorderLayout.CENTER);
@@ -292,6 +302,7 @@ public class ActionsPanel extends JPanel {
         payCashButton.addActionListener(e -> handlePayCash());
         payCardButton.addActionListener(e -> handlePayCard());
         paymentVoidButton.addActionListener(e -> handleCancelTotal());
+        discountButton.addActionListener(e -> handleDiscount());
     }
 
     /**
@@ -1900,5 +1911,14 @@ public class ActionsPanel extends JPanel {
 
     public void returnFocusToScanner() {
         SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+    }
+
+    /**
+     * Handler for Discount button
+     * Placeholder - does nothing for now
+     */
+    private void handleDiscount() {
+        // Placeholder - will be implemented in Phase 3
+        // This button will open discount options (Senior, Veteran, Coupon)
     }
 }
