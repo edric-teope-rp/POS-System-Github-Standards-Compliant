@@ -329,7 +329,7 @@ public class ActionsPanel extends JPanel {
                 addItemToSale(item);
 
                 // Show success indicator (green flash)
-                showSuccessIndicator();
+                showScanIndicator();
 
                 // Clear field for next scan
                 barcodeScannerField.setText("");
@@ -356,7 +356,7 @@ public class ActionsPanel extends JPanel {
     /**
      * Show green indicator light briefly on successful scan
      */
-    private void showSuccessIndicator() {
+    public void showScanIndicator() {
         scanIndicatorPanel.setVisible(true);
         scanIndicatorPanel.repaint();
         indicatorTimer.restart();
@@ -1466,7 +1466,7 @@ public class ActionsPanel extends JPanel {
         infoDialog.setVisible(true);
     }
 
-    private void showWarningDialog(String title, String message, String details) {
+    public void showWarningDialog(String title, String message, String details) {
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         int screenHeight = screenSize.height;
         float scaleFactor = screenHeight / 1080.0f;

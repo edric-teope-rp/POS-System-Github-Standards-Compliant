@@ -17,6 +17,7 @@ public class QuickKeysPanel extends JPanel {
 
     private final PriceBookService priceBookService;
     private final Consumer<PriceBook> onItemSelected;
+    private Runnable onFocusReturn; // Callback to return focus to scanner
 
     // Quick Keys with Pagination and Search
     private JPanel quickKeysGridPanel;
@@ -569,6 +570,10 @@ public class QuickKeysPanel extends JPanel {
         priceFilterCombo.addActionListener(e -> handlePriceFilterChange());
     }
 
+    public void setOnFocusReturn(Runnable callback) {
+        this.onFocusReturn = callback;
+    }
+
     private void loadAllProducts() {
         try {
             allProducts = priceBookService.getAllItems();
@@ -1082,6 +1087,11 @@ public class QuickKeysPanel extends JPanel {
         applySortOrder();
         currentPage = 0;
         updateQuickKeysPage();
+
+        // Return focus to scanner after filter change
+        if (onFocusReturn != null) {
+            SwingUtilities.invokeLater(onFocusReturn);
+        }
     }
 
     private void applySortOrder() {
@@ -1153,6 +1163,7 @@ public class QuickKeysPanel extends JPanel {
         JDialog keyboardDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Search Products", Dialog.ModalityType.MODELESS);
         keyboardDialog.setUndecorated(true);
         keyboardDialog.setResizable(false);
+        keyboardDialog.setAutoRequestFocus(false); // Don't steal focus from scanner
         keyboardDialog.setSize(dialogWidth, dialogHeight);
         keyboardDialog.setMinimumSize(new Dimension(700, 450));
 
@@ -1198,7 +1209,13 @@ public class QuickKeysPanel extends JPanel {
                     }
                 });
 
-                addActionListener(e -> keyboardDialog.dispose());
+                addActionListener(e -> {
+                    keyboardDialog.dispose();
+                    // Return focus to scanner after dialog closes
+                    if (onFocusReturn != null) {
+                        SwingUtilities.invokeLater(onFocusReturn);
+                    }
+                });
             }
 
             @Override
@@ -1253,25 +1270,13 @@ public class QuickKeysPanel extends JPanel {
 
         keyboardDialog.add(headerPanel, BorderLayout.NORTH);
 
-        // Center Panel with input field and keyboard
+        // Center Panel with keyboard only
         JPanel centerPanel = new JPanel();
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
         centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Input text field (read-only, keyboard only)
-        JTextField inputField = new JTextField(searchField.getText());
-        inputField.setFont(new Font("Arial", Font.BOLD, 20));
-        inputField.setHorizontalAlignment(JTextField.CENTER);
-        inputField.setMaximumSize(new Dimension(700, 50));
-        inputField.setPreferredSize(new Dimension(700, 50));
-        inputField.setAlignmentX(Component.CENTER_ALIGNMENT);
-        inputField.setEditable(false);  // Only keyboard can input
-        centerPanel.add(inputField);
-
-        centerPanel.add(Box.createVerticalStrut(15));
-
         // QWERTY Keyboard Panel
-        JPanel keyboardPanel = createQWERTYKeyboard(inputField);
+        JPanel keyboardPanel = createQWERTYKeyboard();
         keyboardPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
         centerPanel.add(keyboardPanel);
 
@@ -1279,7 +1284,13 @@ public class QuickKeysPanel extends JPanel {
 
         // Allow Escape key to close dialog
         keyboardDialog.getRootPane().registerKeyboardAction(
-            e -> keyboardDialog.dispose(),
+            e -> {
+                keyboardDialog.dispose();
+                // Return focus to scanner after dialog closes
+                if (onFocusReturn != null) {
+                    SwingUtilities.invokeLater(onFocusReturn);
+                }
+            },
             KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
@@ -1294,13 +1305,25 @@ public class QuickKeysPanel extends JPanel {
             @Override
             public void windowLostFocus(java.awt.event.WindowEvent e) {
                 keyboardDialog.dispose();
+                // Return focus to scanner after dialog closes
+                if (onFocusReturn != null) {
+                    SwingUtilities.invokeLater(onFocusReturn);
+                }
             }
         });
 
         keyboardDialog.setVisible(true);
+
+        // Return focus to scanner after a short delay to ensure dialog is fully shown
+        // This allows barcode scanning to work while dialog is open
+        if (onFocusReturn != null) {
+            Timer focusTimer = new Timer(100, e -> onFocusReturn.run());
+            focusTimer.setRepeats(false);
+            focusTimer.start();
+        }
     }
 
-    private JPanel createQWERTYKeyboard(JTextField inputField) {
+    private JPanel createQWERTYKeyboard() {
         JPanel keyboardPanel = new JPanel(new GridBagLayout());
         keyboardPanel.setBackground(Color.WHITE);
         keyboardPanel.setMaximumSize(new Dimension(700, 350));
@@ -1318,7 +1341,7 @@ public class QuickKeysPanel extends JPanel {
         for (int i = 0; i < row0.length; i++) {
             gbc.gridx = i;
             gbc.gridwidth = 1;
-            JButton key = createKeyboardKey(row0[i], inputField);
+            JButton key = createKeyboardKey(row0[i]);
             keyboardPanel.add(key, gbc);
         }
 
@@ -1328,7 +1351,7 @@ public class QuickKeysPanel extends JPanel {
         for (int i = 0; i < row1.length; i++) {
             gbc.gridx = i;
             gbc.gridwidth = 1;
-            JButton key = createKeyboardKey(row1[i], inputField);
+            JButton key = createKeyboardKey(row1[i]);
             keyboardPanel.add(key, gbc);
         }
 
@@ -1338,14 +1361,14 @@ public class QuickKeysPanel extends JPanel {
         for (int i = 0; i < row2.length; i++) {
             gbc.gridx = i;
             gbc.gridwidth = 1;
-            JButton key = createKeyboardKey(row2[i], inputField);
+            JButton key = createKeyboardKey(row2[i]);
             keyboardPanel.add(key, gbc);
         }
 
         // Backspace button (right of row 2)
         gbc.gridx = 9;
         gbc.gridwidth = 1;
-        JButton backspaceBtn = createKeyboardKey("←", inputField);
+        JButton backspaceBtn = createKeyboardKey("←");
         backspaceBtn.setBackground(new Color(255, 193, 7)); // Amber
         backspaceBtn.setForeground(Color.WHITE);
         applyRoundedStyle(backspaceBtn);
@@ -1357,14 +1380,14 @@ public class QuickKeysPanel extends JPanel {
         for (int i = 0; i < row3.length; i++) {
             gbc.gridx = i;
             gbc.gridwidth = 1;
-            JButton key = createKeyboardKey(row3[i], inputField);
+            JButton key = createKeyboardKey(row3[i]);
             keyboardPanel.add(key, gbc);
         }
 
         // Clear button (right of row 3)
         gbc.gridx = 7;
         gbc.gridwidth = 3;
-        JButton clearBtn = createKeyboardKey("Clear", inputField);
+        JButton clearBtn = createKeyboardKey("Clear");
         clearBtn.setBackground(new Color(220, 53, 69)); // Red
         clearBtn.setForeground(Color.WHITE);
         applyRoundedStyle(clearBtn);
@@ -1374,13 +1397,13 @@ public class QuickKeysPanel extends JPanel {
         gbc.gridy = 4;
         gbc.gridx = 0;
         gbc.gridwidth = 7;
-        JButton spaceBtn = createKeyboardKey("Space", inputField);
+        JButton spaceBtn = createKeyboardKey("Space");
         keyboardPanel.add(spaceBtn, gbc);
 
         // Enter button (right side of row 4)
         gbc.gridx = 7;
         gbc.gridwidth = 3;
-        JButton enterBtn = createKeyboardKey("Enter", inputField);
+        JButton enterBtn = createKeyboardKey("Enter");
         enterBtn.setBackground(new Color(40, 167, 69)); // Green
         enterBtn.setForeground(Color.WHITE);
         applyRoundedStyle(enterBtn);
@@ -1389,7 +1412,7 @@ public class QuickKeysPanel extends JPanel {
         return keyboardPanel;
     }
 
-    private JButton createKeyboardKey(String key, JTextField inputField) {
+    private JButton createKeyboardKey(String key) {
         JButton keyButton = new JButton(key);
         keyButton.setFont(new Font("Arial", Font.BOLD, 16));
         keyButton.setFocusPainted(false);
@@ -1397,7 +1420,7 @@ public class QuickKeysPanel extends JPanel {
         keyButton.setForeground(Color.BLACK);
 
         keyButton.addActionListener(e -> {
-            String currentText = inputField.getText();
+            String currentText = searchField.getText();
             String newText = currentText;
 
             if (key.equals("Clear")) {
@@ -1414,6 +1437,10 @@ public class QuickKeysPanel extends JPanel {
                 Window window = SwingUtilities.getWindowAncestor(keyButton);
                 if (window != null) {
                     window.dispose();
+                    // Return focus to scanner after dialog closes
+                    if (onFocusReturn != null) {
+                        SwingUtilities.invokeLater(onFocusReturn);
+                    }
                 }
                 return; // Don't update text fields
             } else {
@@ -1421,14 +1448,16 @@ public class QuickKeysPanel extends JPanel {
                 newText = currentText + key;
             }
 
-            // Update dialog input field
-            inputField.setText(newText);
-
-            // Also update the actual search field in real-time
+            // Update the search field in real-time
             searchField.setText(newText);
 
             // Trigger search/auto-suggest as user types
             handleSearchInput();
+
+            // Return focus to scanner after keyboard button press
+            if (onFocusReturn != null) {
+                SwingUtilities.invokeLater(onFocusReturn);
+            }
         });
 
         return keyButton;
