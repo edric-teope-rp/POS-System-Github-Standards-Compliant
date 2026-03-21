@@ -1,6 +1,7 @@
 package org.possystem.ui;
 
 import org.possystem.entity.TransactionItem;
+import org.possystem.entity.TransactionDiscount;
 import org.possystem.service.TransactionService;
 
 import javax.swing.*;
@@ -23,15 +24,16 @@ public class CurrentSalePanel extends JPanel {
     private JTable saleTable;
     private SaleTableModel saleTableModel;
     private JLabel subtotalLabel;
+    private JPanel discountsPanel; // Container for discount labels
     private JLabel taxLabel;
     private JLabel totalLabel;
 
     public static final int MIN_WIDTH = 400;
 
-    // Calculate width as 42% of screen width
+    // Calculate width as 35% of screen width
     private static int calculateWidth() {
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        int calculatedWidth = (int) (screenSize.width * 0.42);
+        int calculatedWidth = (int) (screenSize.width * 0.35);
         // Ensure minimum of 400px
         return Math.max(calculatedWidth, MIN_WIDTH);
     }
@@ -45,7 +47,7 @@ public class CurrentSalePanel extends JPanel {
 
         setLayout(new BorderLayout(5, 5));
         setBorder(BorderFactory.createTitledBorder("Current Sale"));
-        // Fixed width panel - no resizing, but responsive to screen size (42% of screen width)
+        // Fixed width panel - no resizing, but responsive to screen size (35% of screen width)
         setPreferredSize(new Dimension(DEFAULT_WIDTH, 0));
         setMinimumSize(new Dimension(DEFAULT_WIDTH, 0));
         setMaximumSize(new Dimension(DEFAULT_WIDTH, Integer.MAX_VALUE));
@@ -75,7 +77,7 @@ public class CurrentSalePanel extends JPanel {
             }
         });
 
-        // Set column widths (proportional to 42% screen width)
+        // Set column widths (proportional to 35% screen width)
         saleTable.getColumnModel().getColumn(0).setPreferredWidth(408); // Name
         saleTable.getColumnModel().getColumn(1).setPreferredWidth(70); // Qty
         saleTable.getColumnModel().getColumn(1).setMinWidth(60);
@@ -88,6 +90,12 @@ public class CurrentSalePanel extends JPanel {
         // Totals Display
         subtotalLabel = new JLabel("Subtotal: $0.00");
         subtotalLabel.setFont(new Font("Arial", Font.PLAIN, 18));
+
+        // Discounts panel - will hold dynamic discount labels
+        discountsPanel = new JPanel();
+        discountsPanel.setLayout(new BoxLayout(discountsPanel, BoxLayout.Y_AXIS));
+        discountsPanel.setOpaque(false);
+
         taxLabel = new JLabel("Tax (7%): $0.00");
         taxLabel.setFont(new Font("Arial", Font.PLAIN, 18));
         totalLabel = new JLabel("Total: $0.00");
@@ -101,12 +109,24 @@ public class CurrentSalePanel extends JPanel {
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         add(scrollPane, BorderLayout.CENTER);
 
-        // Totals panel at bottom
-        JPanel totalsPanel = new JPanel(new GridLayout(3, 1, 5, 5));
+        // Totals panel at bottom - using BoxLayout for dynamic rows
+        JPanel totalsPanel = new JPanel();
+        totalsPanel.setLayout(new BoxLayout(totalsPanel, BoxLayout.Y_AXIS));
         totalsPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Add components in order: Subtotal, Discounts (dynamic), Tax, Total
+        subtotalLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         totalsPanel.add(subtotalLabel);
+
+        discountsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        totalsPanel.add(discountsPanel);
+
+        taxLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         totalsPanel.add(taxLabel);
+
+        totalLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         totalsPanel.add(totalLabel);
+
         add(totalsPanel, BorderLayout.SOUTH);
     }
 
@@ -115,13 +135,49 @@ public class CurrentSalePanel extends JPanel {
             List<TransactionItem> items = transactionService.getCurrentSaleItems();
             saleTableModel.setItems(items);
 
-            double subtotal = transactionService.getTransactionSubtotal();
-            double total = transactionService.getTransactionTotal();
-            double tax = total - subtotal;
+            // Get items subtotal (before discounts)
+            double itemsSubtotal = transactionService.getTransactionSubtotal();
+            subtotalLabel.setText(String.format("Subtotal: $%.2f", itemsSubtotal));
 
-            subtotalLabel.setText(String.format("Subtotal: $%.2f", subtotal));
+            // Clear and rebuild discounts panel
+            discountsPanel.removeAll();
+
+            // Get active discounts
+            List<TransactionDiscount> activeDiscounts = transactionService.getActiveDiscounts();
+
+            // Display each discount with gray italic text
+            for (TransactionDiscount discount : activeDiscounts) {
+                String discountText = "";
+                if (discount.discountType().equals("SENIOR")) {
+                    discountText = String.format("Senior Discount (5%%): -$%.2f", Math.abs(discount.discountAmount()));
+                } else if (discount.discountType().equals("VETERAN")) {
+                    discountText = String.format("Veteran Discount (10%%): -$%.2f", Math.abs(discount.discountAmount()));
+                } else if (discount.discountType().equals("COUPON")) {
+                    discountText = String.format("Coupon Discount: -$%.2f", Math.abs(discount.discountAmount()));
+                } else if (discount.discountType().equals("PROMOTIONAL")) {
+                    discountText = String.format("Promotional Discount: -$%.2f", Math.abs(discount.discountAmount()));
+                }
+
+                JLabel discountLabel = new JLabel(discountText);
+                discountLabel.setFont(new Font("Arial", Font.ITALIC, 18));
+                discountLabel.setForeground(new Color(100, 100, 100)); // Gray color
+                discountLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                discountsPanel.add(discountLabel);
+            }
+
+            // Get discounted subtotal (includes discount amounts)
+            double discountedSubtotal = transactionService.getSubtotal();
+
+            // Calculate tax on discounted subtotal
+            double tax = discountedSubtotal * 0.07;
+            double total = discountedSubtotal + tax;
+
             taxLabel.setText(String.format("Tax (7%%): $%.2f", tax));
             totalLabel.setText(String.format("Total: $%.2f", total));
+
+            // Refresh the UI
+            discountsPanel.revalidate();
+            discountsPanel.repaint();
 
         } catch (SQLException e) {
             showError("Failed to refresh display: " + e.getMessage());
