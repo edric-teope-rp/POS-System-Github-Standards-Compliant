@@ -2,6 +2,7 @@ package org.possystem.ui;
 
 import org.possystem.service.PriceBookService;
 import org.possystem.service.TransactionService;
+import org.possystem.service.DiscountApiClient;
 import org.possystem.socket.SocketService;
 
 import javax.swing.*;
@@ -17,6 +18,7 @@ public class PosInterface extends JFrame {
     // Services
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
+    private final DiscountApiClient discountApiClient;
     private final SocketService socketService;
     private final GlobalBarcodeScanner globalScanner;
 
@@ -28,10 +30,14 @@ public class PosInterface extends JFrame {
     public PosInterface() {
         this.priceBookService = new PriceBookService();
         this.transactionService = new TransactionService();
+        this.discountApiClient = new DiscountApiClient(); // Default URL: http://localhost:8080/api/discounts
         this.socketService = new SocketService("config/socket-config.json");
 
         // Wire socket service to transaction service for journal broadcasting
         this.transactionService.setSocketService(socketService);
+
+        // Wire discount API client to transaction service for discount recalculation
+        this.transactionService.setDiscountApiClient(discountApiClient);
 
         // Initialize global barcode scanner
         this.globalScanner = new GlobalBarcodeScanner(
@@ -94,7 +100,7 @@ public class PosInterface extends JFrame {
 
         currentSalePanel = new CurrentSalePanel(transactionService, this::updateDeleteSelectedButton);
 
-        actionsPanel = new ActionsPanel(priceBookService, transactionService, this::refreshSaleDisplay);
+        actionsPanel = new ActionsPanel(priceBookService, transactionService, discountApiClient, this::refreshSaleDisplay);
 
         // Wire up callbacks
         actionsPanel.setDeleteSelectedCallback(this::handleDeleteSelected);
@@ -656,20 +662,11 @@ public class PosInterface extends JFrame {
 
         List<Integer> selectedIds = List.of(rowSelectedId);
 
-        // Create custom confirmation dialog
-        boolean confirmed = showConfirmDialog(
-            "Confirm Delete",
-            "Delete selected item?",
-            "This action will remove the selected item from the cart."
-        );
-
-        if (confirmed) {
-            try {
-                transactionService.deleteSelectedItems(selectedIds);
-                refreshSaleDisplay();
-            } catch (SQLException e) {
-                showError("Failed to delete items: " + e.getMessage());
-            }
+        try {
+            transactionService.deleteSelectedItems(selectedIds);
+            refreshSaleDisplay();
+        } catch (SQLException e) {
+            showError("Failed to delete items: " + e.getMessage());
         }
     }
 

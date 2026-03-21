@@ -2,8 +2,10 @@ package org.possystem.ui;
 
 import org.possystem.entity.PriceBook;
 import org.possystem.entity.TransactionItem;
+import org.possystem.entity.TransactionDiscount;
 import org.possystem.service.PriceBookService;
 import org.possystem.service.TransactionService;
+import org.possystem.service.DiscountApiClient;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -20,6 +22,7 @@ public class ActionsPanel extends JPanel {
 
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
+    private final DiscountApiClient discountApiClient;
     private final Runnable onSaleRefresh;
     private Runnable onTransactionFinalized;
     private Runnable onTransactionResumed;
@@ -48,9 +51,10 @@ public class ActionsPanel extends JPanel {
     private JButton discountButton;
 
     public ActionsPanel(PriceBookService priceBookService, TransactionService transactionService,
-                       Runnable onSaleRefresh) {
+                       DiscountApiClient discountApiClient, Runnable onSaleRefresh) {
         this.priceBookService = priceBookService;
         this.transactionService = transactionService;
+        this.discountApiClient = discountApiClient;
         this.onSaleRefresh = onSaleRefresh;
 
         setLayout(new BorderLayout(5, 5));
@@ -479,12 +483,13 @@ public class ActionsPanel extends JPanel {
 
             if (confirmed) {
                 List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                double subtotal = transactionService.getTransactionSubtotal();
+                List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
                 transactionService.processCash(total);
 
-                showReceiptDialog(items, subtotal, tax, total, total, 0, "CASH - EXACT");
+                showReceiptDialog(items, discounts, subtotal, tax, total, total, 0, "CASH - EXACT");
             } else {
                 // User clicked "No" - return to Cash Payment Options
                 showCashPaymentOptionsDialog(total);
@@ -514,12 +519,13 @@ public class ActionsPanel extends JPanel {
 
             if (confirmed) {
                 List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                double subtotal = transactionService.getTransactionSubtotal();
+                List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
                 transactionService.processCash(nextDollar);
 
-                showReceiptDialog(items, subtotal, tax, total, nextDollar, change, "CASH - NEXT DOLLAR");
+                showReceiptDialog(items, discounts, subtotal, tax, total, nextDollar, change, "CASH - NEXT DOLLAR");
             } else {
                 // User clicked "No" - return to Cash Payment Options
                 showCashPaymentOptionsDialog(total);
@@ -545,12 +551,13 @@ public class ActionsPanel extends JPanel {
 
             if (confirmed) {
                 List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                double subtotal = transactionService.getTransactionSubtotal();
+                List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
                 transactionService.processCard("", "", "");
 
-                showReceiptDialog(items, subtotal, tax, total, total, 0, "CARD");
+                showReceiptDialog(items, discounts, subtotal, tax, total, total, 0, "CARD");
             }
         } catch (SQLException e) {
             showError("Payment failed: " + e.getMessage());
@@ -607,13 +614,14 @@ public class ActionsPanel extends JPanel {
                     validInput = true;
 
                     List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                    double subtotal = transactionService.getTransactionSubtotal();
+                    List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                    double subtotal = transactionService.getSubtotal(); // Include discounts
                     double tax = total - subtotal;
                     double change = tendered - total;
 
                     transactionService.processCash(tendered);
 
-                    showReceiptDialog(items, subtotal, tax, total, tendered, change, "CASH");
+                    showReceiptDialog(items, discounts, subtotal, tax, total, tendered, change, "CASH");
 
                 } catch (NumberFormatException e) {
                     showErrorDialog(
@@ -1050,8 +1058,8 @@ public class ActionsPanel extends JPanel {
         cashDialog.setVisible(true);
     }
 
-    private void showReceiptDialog(List<TransactionItem> items, double subtotal,
-                                   double tax, double total, double tendered,
+    private void showReceiptDialog(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                   double subtotal, double tax, double total, double tendered,
                                    double change, String paymentType) {
         JDialog receiptDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Receipt", Dialog.ModalityType.APPLICATION_MODAL);
 
@@ -1134,7 +1142,7 @@ public class ActionsPanel extends JPanel {
         contentPanel.setBackground(Color.WHITE);
         contentPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        JTextArea receiptArea = new JTextArea(buildReceiptText(items, subtotal, tax,
+        JTextArea receiptArea = new JTextArea(buildReceiptText(items, discounts, subtotal, tax,
             total, tendered, change, paymentType));
         receiptArea.setEditable(false);
         receiptArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
@@ -1181,11 +1189,14 @@ public class ActionsPanel extends JPanel {
         receiptDialog.setVisible(true);
     }
 
-    private String buildReceiptText(List<TransactionItem> items, double subtotal,
-                                    double tax, double total, double tendered,
+    private String buildReceiptText(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                    double subtotal, double tax, double total, double tendered,
                                     double change, String paymentType) {
         StringBuilder receipt = new StringBuilder();
         receipt.append("=================== RECEIPT ===================\n\n");
+
+        // Display items
+        double itemsTotal = 0.0;
         for (TransactionItem item : items) {
             if (item.status().equals("ACTIVE")) {
                 receipt.append(String.format("%-34s x%-2d\n",
@@ -1193,9 +1204,33 @@ public class ActionsPanel extends JPanel {
                     item.quantity()));
                 receipt.append(String.format("  $%-8.2f ea.                  $%-8.2f\n\n",
                     item.unitPrice(), item.subtotal()));
+                itemsTotal += item.subtotal();
             }
         }
+
         receipt.append("===============================================\n");
+
+        // Show items subtotal
+        receipt.append(String.format("Items Subtotal:                     $%-8.2f\n", itemsTotal));
+
+        // Show discounts if any
+        if (discounts != null && !discounts.isEmpty()) {
+            for (TransactionDiscount discount : discounts) {
+                String discountLabel = "";
+                if (discount.discountType().equals("SENIOR")) {
+                    discountLabel = "Senior Discount (5%):";
+                } else if (discount.discountType().equals("VETERAN")) {
+                    discountLabel = "Veteran Discount (10%):";
+                } else if (discount.discountType().equals("COUPON")) {
+                    discountLabel = "Coupon Discount:";
+                } else if (discount.discountType().equals("PROMOTIONAL")) {
+                    discountLabel = "Promotional Discount:";
+                }
+                receipt.append(String.format("%-36s -$%-8.2f\n", discountLabel, Math.abs(discount.discountAmount())));
+            }
+            receipt.append("-----------------------------------------------\n");
+        }
+
         receipt.append(String.format("Subtotal:                           $%-8.2f\n", subtotal));
         receipt.append(String.format("Tax (7%%):                           $%-8.2f\n", tax));
         receipt.append(String.format("TOTAL:                              $%-8.2f\n\n", total));
@@ -1875,6 +1910,8 @@ public class ActionsPanel extends JPanel {
         deleteSelectedButton.repaint();
         voidTransactionButton.setEnabled(enabled);
         voidTransactionButton.repaint();
+        discountButton.setEnabled(enabled);
+        discountButton.repaint();
         totalButton.setEnabled(enabled);
         totalButton.repaint();
     }
@@ -1918,7 +1955,14 @@ public class ActionsPanel extends JPanel {
      * Placeholder - does nothing for now
      */
     private void handleDiscount() {
-        // Placeholder - will be implemented in Phase 3
-        // This button will open discount options (Senior, Veteran, Coupon)
+        // Open discount dialog
+        Window parentWindow = SwingUtilities.getWindowAncestor(this);
+        DiscountDialog dialog = new DiscountDialog(
+            parentWindow,
+            transactionService,
+            discountApiClient,
+            onSaleRefresh  // Refresh the sale display after discount applied
+        );
+        dialog.setVisible(true);
     }
 }

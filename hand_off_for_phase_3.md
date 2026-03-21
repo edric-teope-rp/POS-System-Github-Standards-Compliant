@@ -25,7 +25,7 @@
 ## Project Overview
 
 ### POS System Tech Stack
-- **Frontend**: Java Swing (Java 21)
+- **Frontend**: Java Swing (Java 21)ex
 - **Backend**: Spring Boot (separate project)
 - **Database**: H2 (embedded)
 - **Build Tool**: Gradle

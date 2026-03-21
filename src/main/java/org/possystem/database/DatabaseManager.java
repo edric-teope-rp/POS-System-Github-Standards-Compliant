@@ -71,6 +71,20 @@ public class DatabaseManager {
             )
         """);
 
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS transaction_discounts (
+                id              INT AUTO_INCREMENT PRIMARY KEY,
+                transaction_id  INT NOT NULL,
+                discount_type   VARCHAR(50) NOT NULL,
+                discount_amount DOUBLE NOT NULL,
+                item_id         INT DEFAULT NULL,
+                status          VARCHAR(20) DEFAULT 'ACTIVE',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (transaction_id) REFERENCES transaction_header(id),
+                FOREIGN KEY (item_id) REFERENCES transaction_items(id)
+            )
+        """);
+
         System.out.println("Tables created successfully!");
     }
 
