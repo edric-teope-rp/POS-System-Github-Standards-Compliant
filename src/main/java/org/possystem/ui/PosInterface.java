@@ -434,13 +434,13 @@ public class PosInterface extends JFrame {
         int buttonHeight = Math.round(55 * scaleFactor);
 
         int dialogWidth = (int) (screenSize.width * 0.25);
-        int dialogHeight = (int) (screenSize.height * 0.50);
+        int dialogHeight = (int) (screenSize.height * 0.35);
 
         JDialog settingsDialog = new JDialog(this, "Settings", Dialog.ModalityType.APPLICATION_MODAL);
         settingsDialog.setUndecorated(true);
         settingsDialog.setResizable(false);
         settingsDialog.setSize(dialogWidth, dialogHeight);
-        settingsDialog.setMinimumSize(new Dimension(350, 420));
+        settingsDialog.setMinimumSize(new Dimension(350, 320));
         settingsDialog.setLocationRelativeTo(this);
         settingsDialog.setLayout(new BorderLayout());
 
@@ -531,63 +531,34 @@ public class PosInterface extends JFrame {
         centerPanel.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
         centerPanel.setBackground(Color.WHITE);
 
-        // Light Mode Button
-        JButton lightModeButton = new JButton("Light Mode");
-        lightModeButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        lightModeButton.setPreferredSize(new Dimension(0, buttonHeight));
-        lightModeButton.setBackground(new Color(240, 240, 240));
-        lightModeButton.setForeground(Color.BLACK);
-        lightModeButton.setFocusPainted(false);
-        lightModeButton.setBorderPainted(true);
-        lightModeButton.setOpaque(true);
-        lightModeButton.addActionListener(e -> {
-            // TODO: Implement Light Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Light Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(lightModeButton);
-
-        // Dark Mode Button
-        JButton darkModeButton = new JButton("Dark Mode");
-        darkModeButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        darkModeButton.setPreferredSize(new Dimension(0, buttonHeight));
-        darkModeButton.setBackground(new Color(45, 45, 48));
-        darkModeButton.setForeground(Color.WHITE);
-        darkModeButton.setFocusPainted(false);
-        darkModeButton.setBorderPainted(true);
-        darkModeButton.setOpaque(true);
-        darkModeButton.addActionListener(e -> {
-            // TODO: Implement Dark Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Dark Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(darkModeButton);
-
-        // Auto Button
-        JButton autoButton = new JButton("Auto");
-        autoButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        autoButton.setPreferredSize(new Dimension(0, buttonHeight));
-        autoButton.setBackground(new Color(128, 128, 128)); // Grey
-        autoButton.setForeground(Color.WHITE);
-        autoButton.setFocusPainted(false);
-        autoButton.setBorderPainted(true);
-        autoButton.setOpaque(true);
-        autoButton.addActionListener(e -> {
-            // TODO: Implement Auto Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Auto Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(autoButton);
-
-        // Low Attention Span Mode Button
-        JButton lowAttentionButton = new JButton("Low Attention Span Mode");
+        // Low Attention Span Mode Button (Toggle)
+        final boolean[] lowAttentionModeEnabled = {false}; // Track state
+        JButton lowAttentionButton = new JButton("Low Attention Span Mode: OFF");
         lowAttentionButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
         lowAttentionButton.setPreferredSize(new Dimension(0, buttonHeight));
-        lowAttentionButton.setBackground(new Color(255, 140, 0));  // Dark orange
+        lowAttentionButton.setBackground(new Color(128, 128, 128));  // Gray when OFF
         lowAttentionButton.setForeground(Color.WHITE);
         lowAttentionButton.setFocusPainted(false);
         lowAttentionButton.setBorderPainted(true);
         lowAttentionButton.setOpaque(true);
         lowAttentionButton.addActionListener(e -> {
-            // TODO: Implement Low Attention Span Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Low Attention Span Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
+            // Toggle the state
+            lowAttentionModeEnabled[0] = !lowAttentionModeEnabled[0];
+
+            // Update button appearance
+            if (lowAttentionModeEnabled[0]) {
+                lowAttentionButton.setText("Low Attention Span Mode: ON");
+                lowAttentionButton.setBackground(new Color(255, 140, 0));  // Dark orange when ON
+            } else {
+                lowAttentionButton.setText("Low Attention Span Mode: OFF");
+                lowAttentionButton.setBackground(new Color(128, 128, 128));  // Gray when OFF
+            }
+
+            // Apply the mode to CurrentSalePanel
+            currentSalePanel.setLowAttentionSpanMode(lowAttentionModeEnabled[0]);
+
+            // Repaint button to show color change
+            lowAttentionButton.repaint();
         });
         applyRoundedStyle(lowAttentionButton);
 
@@ -623,25 +594,11 @@ public class PosInterface extends JFrame {
         });
         applyRoundedStyle(apiConfigButton);
 
-        // Theme buttons
-        lightModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        lightModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(lightModeButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        darkModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        darkModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(darkModeButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        autoButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        autoButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(autoButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
+        // Low Attention Span Mode
         lowAttentionButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         lowAttentionButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
         centerPanel.add(lowAttentionButton);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
 
         // Separator between theme buttons and configuration buttons
         centerPanel.add(Box.createRigidArea(new Dimension(0, 20)));
