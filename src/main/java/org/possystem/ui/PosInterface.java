@@ -39,6 +39,11 @@ public class PosInterface extends JFrame {
         // Wire discount API client to transaction service for discount recalculation
         this.transactionService.setDiscountApiClient(discountApiClient);
 
+        // Wire toast callback for promotional discount notifications
+        this.transactionService.setToastCallback((title, message) -> {
+            ToastNotification.showToast(this, title, message);
+        });
+
         // Initialize global barcode scanner
         this.globalScanner = new GlobalBarcodeScanner(
             priceBookService,
@@ -100,7 +105,7 @@ public class PosInterface extends JFrame {
 
         currentSalePanel = new CurrentSalePanel(transactionService, this::updateDeleteSelectedButton);
 
-        actionsPanel = new ActionsPanel(priceBookService, transactionService, discountApiClient, this::refreshSaleDisplay);
+        actionsPanel = new ActionsPanel(priceBookService, transactionService, discountApiClient, globalScanner, this::refreshSaleDisplay);
 
         // Wire up callbacks
         actionsPanel.setDeleteSelectedCallback(this::handleDeleteSelected);
@@ -790,19 +795,126 @@ public class PosInterface extends JFrame {
 
     /**
      * Global scanner callback - Scan error (item not found)
+     * Try validating as coupon if product not found
      */
     private void handleScanError(String errorMessage) {
         // Check if it's a "not found" error (contains UPC)
         if (!errorMessage.startsWith("Database error")) {
-            // Item not found - show warning dialog
-            actionsPanel.showWarningDialog(
-                "Product Not Found",
-                "Item Not in System",
-                "The scanned barcode does not match any item in the system.<br><br><b>Scanned Code:</b> " + errorMessage
-            );
+            // Item not found - try validating as coupon code
+            String scannedCode = errorMessage; // The error message contains the scanned UPC
+            tryValidateCouponFromScan(scannedCode);
         } else {
             // Database error
             showError(errorMessage);
+        }
+    }
+
+    /**
+     * Try to validate scanned code as a coupon.
+     * Called when a scanned code is not found in the pricebook.
+     * @param scannedCode The scanned code to validate as coupon
+     */
+    private void tryValidateCouponFromScan(String scannedCode) {
+        try {
+            // Check if coupon already applied
+            if (transactionService.hasDiscountType("COUPON")) {
+                actionsPanel.showWarningDialog(
+                    "One Coupon Per Transaction",
+                    "Cannot Apply Coupon",
+                    "Only one coupon can be applied per transaction."
+                );
+                return;
+            }
+
+            // Get cart items and subtotal
+            List<org.possystem.entity.TransactionItem> cartItems = transactionService.getCurrentSaleItems();
+            double cartSubtotal = transactionService.getTransactionSubtotal();
+
+            double discountAmount = 0.0;
+            String description = "Coupon: " + scannedCode.toUpperCase();
+            boolean isEmptyCart = cartItems.isEmpty() || cartSubtotal == 0;
+
+            // DEBUG: Log what we're sending
+            System.out.println("=== BARCODE COUPON VALIDATION DEBUG ===");
+            System.out.println("Coupon Code: " + scannedCode);
+            System.out.println("Cart Subtotal: $" + String.format("%.2f", cartSubtotal));
+            System.out.println("Cart Items Count: " + cartItems.size());
+
+            // If cart is empty, send minimal dummy data to validate coupon exists
+            if (isEmptyCart) {
+                System.out.println("Empty cart - Sending dummy data for validation");
+                // Create dummy cart item for validation
+                cartItems = List.of(new org.possystem.entity.TransactionItem(0, 0, "000000000000", "Validation", 1, 0.01, 0.01, "ACTIVE"));
+                cartSubtotal = 0.01;
+            }
+
+            // Call API to validate coupon (with real or dummy data)
+            org.possystem.dto.CouponValidationResponse response = discountApiClient.validateCoupon(
+                scannedCode,
+                cartItems,
+                cartSubtotal
+            );
+
+            // DEBUG: Log API response
+            System.out.println("API Response - Valid: " + response.valid());
+            System.out.println("API Response - Triggered: " + response.triggered());
+            if (!response.valid()) {
+                System.out.println("API Response - Error Type: " + response.errorType());
+                System.out.println("API Response - Message: " + response.message());
+            } else {
+                System.out.println("API Response - Discount Amount: $" + String.format("%.2f", response.discountAmount()));
+                if (!response.triggered()) {
+                    System.out.println("API Response - Remaining Amount: $" + String.format("%.2f", response.remainingAmount()));
+                }
+            }
+            System.out.println("==============================");
+
+            // Check if coupon is valid (exists and not expired)
+            if (!response.valid()) {
+                // Silent failure for invalid/expired coupons scanned via barcode
+                System.out.println("Scanned coupon invalid: " + scannedCode + " - " + response.message());
+                return;
+            }
+
+            // Coupon is valid - get discount amount and description from API
+            // If cart was empty, use $0 discount (ignore API amount from dummy data)
+            if (isEmptyCart) {
+                discountAmount = 0.0;
+                description = response.description() != null ? response.description() : "Coupon: " + scannedCode.toUpperCase();
+                System.out.println("Empty cart - Using $0 discount (will recalculate when items added)");
+            } else {
+                // For non-empty carts, only use discount amount if triggered
+                if (response.triggered()) {
+                    discountAmount = response.discountAmount() != null ? response.discountAmount() : 0.0;
+                    System.out.println("Coupon triggered - Applying discount: $" + discountAmount);
+                } else {
+                    discountAmount = 0.0;
+                    System.out.println("Coupon not triggered (minimum not met) - Using $0 discount");
+                }
+                description = response.description() != null ? response.description() : "Coupon: " + scannedCode.toUpperCase();
+            }
+
+            System.out.println("Applying coupon " + scannedCode + " with discount: $" + discountAmount);
+
+            transactionService.applyCouponDiscount(
+                scannedCode.toUpperCase(),
+                -discountAmount, // Store as negative
+                description
+            );
+
+            // Show simple success toast notification
+            String toastMessage = String.format("%s applied", scannedCode.toUpperCase());
+            ToastNotification.showToast(this, "Coupon Applied", toastMessage);
+
+            refreshSaleDisplay();
+
+        } catch (Exception e) {
+            // DEBUG: Print full stack trace
+            System.err.println("=== BARCODE COUPON VALIDATION EXCEPTION ===");
+            System.err.println("Exception type: " + e.getClass().getName());
+            System.err.println("Exception message: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("===========================================");
         }
     }
 

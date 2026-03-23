@@ -3,12 +3,19 @@ package org.possystem.service;
 import com.google.gson.Gson;
 import org.possystem.dto.PromotionalDiscountResponse;
 import org.possystem.dto.SeniorVeteranDiscountResponse;
+import org.possystem.dto.CouponValidationResponse;
+import org.possystem.entity.TransactionItem;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.ArrayList;
 
 /**
  * HTTP Client for communicating with the Discount Engine API.
@@ -154,5 +161,55 @@ public class DiscountApiClient {
      */
     public String getBaseUrl() {
         return baseUrl;
+    }
+
+    /**
+     * Validate coupon code.
+     * POST /api/discounts/validate-coupon
+     *
+     * @param couponCode The coupon code to validate
+     * @param cartItems The current cart items
+     * @param cartSubtotal The current cart subtotal
+     * @return CouponValidationResponse with validation result
+     * @throws Exception if API call fails
+     */
+    public CouponValidationResponse validateCoupon(String couponCode, List<TransactionItem> cartItems, double cartSubtotal) throws Exception {
+        String url = baseUrl + "/validate-coupon";
+
+        // Build request body
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("couponCode", couponCode.toUpperCase()); // Case-insensitive
+        requestBody.put("cartSubtotal", cartSubtotal);
+        requestBody.put("currentDate", LocalDate.now().toString()); // YYYY-MM-DD format
+
+        // Build cart items array
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (TransactionItem item : cartItems) {
+            if (item.status().equals("ACTIVE")) {
+                Map<String, Object> itemMap = new HashMap<>();
+                itemMap.put("upc", item.upc());
+                itemMap.put("quantity", item.quantity());
+                itemMap.put("unitPrice", item.unitPrice()); // API expects "unitPrice" not "price"
+                items.add(itemMap);
+            }
+        }
+        requestBody.put("cartItems", items);
+
+        String jsonBody = gson.toJson(requestBody);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            return gson.fromJson(response.body(), CouponValidationResponse.class);
+        } else {
+            throw new Exception("API Error: " + response.statusCode() + " - " + response.body());
+        }
     }
 }

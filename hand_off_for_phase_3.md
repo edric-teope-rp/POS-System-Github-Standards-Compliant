@@ -783,6 +783,168 @@ Show user-friendly error dialogs consistent with existing UI style (see `Current
 
 ---
 
+## 🔄 API REFACTORING REQUEST - Coupon Validation Response (2026-03-23)
+
+### Current Problem
+
+The current coupon validation API returns `valid: false` when the minimum purchase requirement is not met, even if the coupon code exists and is not expired. This creates poor UX where customers can't add coupons early in their shopping session.
+
+**Current behavior:**
+- Customer adds $75 of items
+- Tries to apply SAVE20 (requires $100 minimum)
+- API returns `valid: false`
+- POS shows error: "Minimum purchase not met"
+- Customer must wait until cart reaches $100 before adding coupon
+
+### Desired Behavior
+
+Separate coupon existence/validity from the discount trigger condition. Allow customers to add valid coupons at any time, then validate minimum purchase requirements at checkout.
+
+**New behavior:**
+- Customer adds $75 of items
+- Applies SAVE20 coupon
+- POS shows: "SAVE20 applied - $0.00 (add $25 more to unlock $20 discount)"
+- As customer adds items, discount amount updates in real-time
+- At $100+, discount applies automatically
+- When clicking Total, system validates minimum met before payment
+
+### Required API Changes
+
+#### Updated Response Schema
+
+Add new fields to `CouponValidationResponse`:
+
+```json
+{
+  "valid": true,              // ← Coupon exists and not expired
+  "triggered": false,         // ← NEW: Minimum purchase requirement met?
+  "couponCode": "SAVE20",
+  "discountType": "FIXED_AMOUNT",
+  "discountAmount": 20.00,    // ← Always return if valid (even when not triggered)
+  "description": "$20 off orders $100+",
+  "expirationDate": "2027-03-18",
+  "currentSubtotal": 75.00,   // ← Already exists
+  "requiredSubtotal": 100.00, // ← Already exists
+  "remainingAmount": 25.00,   // ← NEW: How much more needed to unlock
+  "message": "Add $25 more to unlock this discount" // ← NEW: User-friendly message
+}
+```
+
+#### Field Definitions
+
+**`valid` (boolean):**
+- `true` = Coupon code exists in database AND not expired
+- `false` = Coupon code not found OR expired
+- **Purpose**: Determines if coupon can be added to cart
+
+**`triggered` (boolean):**
+- `true` = All conditions met (minimum purchase, etc.)
+- `false` = Valid coupon but conditions not met yet
+- **Purpose**: Determines if discount should be applied to payment
+
+**`discountAmount` (double):**
+- Always return the discount value if `valid: true`
+- Even when `triggered: false`
+- Examples:
+  - SAVE20: Always return 20.00
+  - MEMBER10: Always return 10% of current subtotal
+  - ITEM15OFF: Always return $1.50
+
+**`remainingAmount` (double):**
+- How much more customer needs to spend
+- Only relevant for coupons with minimum purchase
+- `remainingAmount = requiredSubtotal - currentSubtotal`
+- If `currentSubtotal >= requiredSubtotal`, return 0
+
+**`message` (string):**
+- User-friendly explanation of coupon status
+- Examples:
+  - `triggered: true` → "Discount applied!"
+  - `triggered: false` → "Add $25 more to unlock this discount"
+  - `valid: false, reason: EXPIRED` → "Coupon expired on 2025-03-18"
+
+### Validation Logic Changes
+
+**OLD Logic:**
+```java
+if (currentSubtotal < requiredSubtotal) {
+    return CouponValidationResponse(valid: false, reason: "MIN_PURCHASE_NOT_MET");
+}
+return CouponValidationResponse(valid: true, discountAmount: 20.00);
+```
+
+**NEW Logic:**
+```java
+boolean valid = couponExists && !isExpired;
+boolean triggered = valid && (currentSubtotal >= requiredSubtotal);
+
+if (!valid) {
+    return CouponValidationResponse(
+        valid: false,
+        reason: isExpired ? "EXPIRED" : "NOT_FOUND",
+        message: getErrorMessage()
+    );
+}
+
+return CouponValidationResponse(
+    valid: true,
+    triggered: triggered,
+    discountAmount: calculateDiscount(),
+    remainingAmount: Math.max(0, requiredSubtotal - currentSubtotal),
+    message: triggered ? "Discount applied!" : "Add $X more to unlock this discount"
+);
+```
+
+### Impact on Existing Endpoints
+
+**Affected Endpoint:**
+- `POST /api/discounts/validate-coupon`
+
+**Backward Compatibility:**
+- Breaking change (new field `triggered` required)
+- POS system will be updated simultaneously
+- No other systems depend on this API
+
+### Test Cases
+
+1. **Valid coupon, triggered:**
+   - Cart: $120, Coupon: SAVE20
+   - Response: `valid: true, triggered: true, discountAmount: 20.00`
+
+2. **Valid coupon, not triggered:**
+   - Cart: $75, Coupon: SAVE20
+   - Response: `valid: true, triggered: false, discountAmount: 20.00, remainingAmount: 25.00`
+
+3. **Expired coupon:**
+   - Cart: $120, Coupon: EXPIRED10
+   - Response: `valid: false, triggered: false, reason: "EXPIRED"`
+
+4. **Invalid coupon:**
+   - Cart: $120, Coupon: INVALID99
+   - Response: `valid: false, triggered: false, reason: "NOT_FOUND"`
+
+5. **Percentage coupon (dynamic discount):**
+   - Cart: $75, Coupon: MEMBER10
+   - Response: `valid: true, triggered: true, discountAmount: 7.50` (10% of $75)
+
+### POS Integration Plan
+
+The POS system will:
+1. Allow coupon application when `valid: true` (regardless of `triggered`)
+2. Display discount amount in real-time as cart changes
+3. Show gray/italic text when `triggered: false`
+4. Validate `triggered: true` before allowing payment
+5. Block payment with error dialog if `triggered: false` at checkout
+
+### Timeline
+
+- **Priority**: Medium-High
+- **Estimated effort**: 2-4 hours
+- **Testing**: Use Swagger UI with test cases above
+- **Coordination**: POS system ready to integrate immediately after API update
+
+---
+
 **Good luck with Phase 3 implementation!** 🚀
 
 All specifications are in `COPY_PASTE_PROMPT.md`. This handoff document provides the technical bridge to integrate everything smoothly.

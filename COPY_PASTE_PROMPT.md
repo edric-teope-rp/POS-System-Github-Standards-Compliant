@@ -10,8 +10,9 @@ I'm continuing work on my Java POS System project. Here's the context from my pr
 
 Before starting any work, you MUST read these files to understand the current implementation plan:
 
-1. **`PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md`** - Complete step-by-step implementation guide for Phase 3 integration (IN PROGRESS)
+1. **`phase_3_on_progress.md`** - Complete step-by-step implementation guide for Phase 3 integration (Phases 3A & 3B COMPLETE, 3C NEXT)
 2. **`hand_off_for_phase_3.md`** - Discount Engine API reference (endpoints, schemas, integration details)
+3. **`DISCOUNT_API_DATA_SYNC_PROMPT.md`** - UPC list for discount-engine-api team (data synchronization)
 
 These files contain essential information for Phase 3 integration work.
 
@@ -23,7 +24,7 @@ These files contain essential information for Phase 3 integration work.
 - **Main Branch**: main
 - **Build**: ✅ Successful
 - **Tech**: Java 25, Gradle, H2 Database, Swing GUI, SLF4J+Logback, Gson (for JSON)
-- **Status**: Phase 1 ✅ COMPLETE, Phase 2 ✅ COMPLETE, **Phase 3B 🔨 IN PROGRESS (~95% Complete)**
+- **Status**: Phase 1 ✅ COMPLETE, Phase 2 ✅ COMPLETE, **Phase 3A ✅ COMPLETE, Phase 3B ✅ COMPLETE**, **Phase 3C ⏭️ NEXT**
 
 ---
 
@@ -74,13 +75,16 @@ These files contain essential information for Phase 3 integration work.
 
 ---
 
-### PHASE 3: Discount Service (Spring Boot REST API) 🔨 IN PROGRESS - Phase 3B ~95% Complete
+### PHASE 3: Discount Service (Spring Boot REST API) ✅ Phases 3A & 3B COMPLETE! - Phase 3C NEXT
 
 - **Discount Engine API**: ✅ Complete and running at `/Users/ed/IdeaProjects/discount-engine-api`
 - **API Base URL**: `http://localhost:8080/api/discounts`
-- **Implementation Approach**: Incremental (~~3A~~ → **3B** → 3C) - **Starting with 3B first**
-- **Current Status**: Phase 3B (Senior/Veteran Discounts) nearly complete, awaiting CurrentSalePanel display update
-- **Planning Document**: See `PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md` for current progress and next steps
+- **Implementation Approach**: Incremental (3A → 3B → 3C)
+- **Current Status**:
+  - **Phase 3A (Promotional Discounts)**: ✅ COMPLETE
+  - **Phase 3B (Senior/Veteran Discounts)**: ✅ COMPLETE
+  - **Phase 3C (Coupon Support)**: ⏭️ NEXT
+- **Planning Document**: See `phase_3_on_progress.md` for current progress and next steps
 - **API Reference**: See `hand_off_for_phase_3.md` for API endpoints and schemas
 
 #### Phase 3 UI Provisions ✅ COMPLETE
@@ -106,7 +110,9 @@ These files contain essential information for Phase 3 integration work.
 
 ## RECENT WORK COMPLETED (Latest Session)
 
-### v3.2 - Phase 3B Senior/Veteran Discounts Implementation (2026-03-21) 🔨 IN PROGRESS
+### v3.3 - Phase 3A & 3B COMPLETE! (2026-03-21) ✅
+
+#### Phase 3B: Senior/Veteran Discounts - COMPLETE ✅
 
 ✅ **Database Schema (New Approach):**
 - Created separate `transaction_discounts` table (cleaner than item_type column approach)
@@ -117,13 +123,13 @@ These files contain essential information for Phase 3 integration work.
 
 ✅ **DTO Classes:**
 - Created `SeniorVeteranDiscountResponse` record
-- Created `PromotionalDiscountResponse` record (prepared for Phase 3A)
+- Created `PromotionalDiscountResponse` record
 
 ✅ **HTTP Client:**
 - Created `DiscountApiClient` with Java 11+ HttpClient (no new dependencies)
 - Implemented `calculateSeniorDiscount(double cartSubtotal)` method
 - Implemented `calculateVeteranDiscount(double cartSubtotal)` method
-- Implemented `calculatePromotionalDiscount()` method (prepared for Phase 3A)
+- Implemented `calculatePromotionalDiscount()` method
 - Implemented `isApiAvailable()` health check
 - Base URL: `http://localhost:8080/api/discounts` (configurable)
 - Timeout: 5 seconds
@@ -137,6 +143,19 @@ These files contain essential information for Phase 3 integration work.
 - Remove buttons visible only when discounts active
 - Modal, draggable, centered dialog (27% width, 32% height, min 490x300)
 - No hover effects, no success dialog popups (per user preference)
+- **Dialog auto-closes after discount application**
+
+✅ **CurrentSalePanel Display - Totals Section:**
+- Senior/Veteran discounts display in totals section
+- Format: "Senior Discount (5%): -$X.XX" / "Veteran Discount (10%): -$X.XX"
+- Gray italic text (18pt) for discount lines
+- Tax calculated on discounted subtotal
+- Dynamic BoxLayout for flexible discount display
+
+✅ **Receipt Updates:**
+- Senior/Veteran discounts shown in totals section
+- Consistent formatting with CurrentSalePanel
+- Discounts calculated correctly before tax
 
 ✅ **TransactionService Integration:**
 - Added `getSubtotal()` - Returns subtotal including discounts
@@ -151,8 +170,69 @@ These files contain essential information for Phase 3 integration work.
 - ActionsPanel wired to open DiscountDialog
 - PosInterface passes DiscountApiClient to ActionsPanel
 - Discount button functional in Transaction Actions zone
+- All tests passing
 
-🔨 **Next:** Update CurrentSalePanel to display discounts in totals section
+#### Phase 3A: Promotional Discounts - COMPLETE ✅
+
+✅ **Data Synchronization:**
+- Created `DISCOUNT_API_DATA_SYNC_PROMPT.md` with all 12 promotional product UPCs
+- Documented data sync issue between POS and API databases
+- Provided instructions for API team to configure discount_percentages table
+- Emphasized UPCs must be stored as STRING type (not numeric)
+
+✅ **ToastNotification UI Component:**
+- Created `ToastNotification.java` - JWindow-based notification
+- Upper-right corner positioning with slide-in animation
+- Green success theme (RGB 212,237,218 background, RGB 40,167,69 border)
+- 3-second auto-dismiss timer
+- Static helper method: `showToast(Window parent, String title, String message)`
+- **Enhanced with product name**: Title: "Buy 2+ Get 25%" / Message: "{Product Name} - You saved $X.XX"
+
+✅ **Service Layer Integration:**
+- `TransactionService.checkAndApplyPromotionalDiscounts()` implemented
+- Iterates cart items with has_promotion flag
+- Calls API for each promotional item
+- Creates discount records linked to item_id
+- Toast shown only on first trigger (using triggeredPromotions HashSet)
+- Removes discounts when threshold not met
+- ToastCallback interface for UI integration
+
+✅ **CurrentSalePanel - INLINE PROMOTIONAL DISCOUNTS:**
+- **Promotional discounts show INLINE below their items** (not in totals)
+- Format: "  Buy {qty}+ Save {percent}%"
+- Example: "  Buy 2+ Save 25%" appears right below the item
+- Gray italic text (14pt) for discount rows
+- Percentage calculated dynamically from discount amount
+- Table rows alternate between items and their discounts
+- Custom TableRow wrapper class for mixed row types
+- Custom DiscountAwareTextRenderer for styling
+- Senior/Veteran discounts remain in totals section (cart-level)
+
+✅ **Receipt - INLINE PROMOTIONAL DISCOUNTS:**
+- **Promotional discounts show INLINE below their items**
+- Format matches CurrentSalePanel: "  Buy {qty}+ Save {percent}%"
+- Map-based approach to link discounts to items
+- Senior/Veteran/Coupon discounts remain in totals section
+- Clean, consistent formatting across UI and receipt
+
+✅ **ActionsPanel Integration:**
+- Payment handlers fetch discounts BEFORE payment
+- `showReceiptDialog()` and `buildReceiptText()` accept discounts parameter
+- Receipt displays all discount types correctly
+- Discounts shown before tax calculation
+
+✅ **All Tests Passing:**
+- Promotional discount triggers on quantity threshold
+- Toast notification appears with product name
+- Discount displays inline below item in CurrentSalePanel
+- Discount displays inline below item on receipt
+- Discount amount updates when quantity changes
+- Discount removed when item voided
+- Multiple promotional items each get their own discount
+- Senior/Veteran discounts display in totals
+- Data sync resolved between POS and API
+
+⏭️ **Next:** Phase 3C - Coupon Support
 
 ### v3.1 - Phase 3 Integration Planning Complete + UI Improvement
 
@@ -233,6 +313,11 @@ These files contain essential information for Phase 3 integration work.
 - **DTOs**:
   - `src/main/java/org/possystem/dto/SeniorVeteranDiscountResponse.java`
   - `src/main/java/org/possystem/dto/PromotionalDiscountResponse.java`
+- **UI Components**:
+  - `src/main/java/org/possystem/ui/DiscountDialog.java`
+  - `src/main/java/org/possystem/ui/ToastNotification.java`
+- **Documentation**:
+  - `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
 
 ### Socket Files (socket package)
 - `SocketService.java` (server + client + discovery logic)
@@ -403,11 +488,12 @@ These files contain essential information for Phase 3 integration work.
 2. Check current branch (should be feature/provisioned-for-phase-3)
 3. Confirm build is successful (`./gradlew build`)
 4. **READ REQUIRED FILES:**
-   - **MUST READ**: `PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md` - Current progress and next steps
+   - **MUST READ**: `phase_3_on_progress.md` - Current progress and next steps
    - **MUST READ**: `hand_off_for_phase_3.md` - API endpoints, schemas, and integration details
+   - **MUST READ**: `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api
 5. Acknowledge you understand the step-by-step approach and the "?" protocol
-6. **Current priority**: Phase 3B (Senior/Veteran Discounts) - ~95% complete
-   - Next task: Update CurrentSalePanel to display discounts in totals section
+6. **Current status**: Phase 3A & 3B COMPLETE! 🎉
+   - Next priority: Phase 3C (Coupon Support)
 7. Wait for me to provide the next task or direction
 
 ---
@@ -419,11 +505,9 @@ These files contain essential information for Phase 3 integration work.
 3. ✅ **DONE**: Phase 3 UI Provisions (promotional buttons, discount button, layout optimization)
 4. ✅ **DONE**: Discount Engine API Complete (Spring Boot REST API running)
 5. ✅ **DONE**: Phase 3 Integration Planning Complete (all decisions finalized)
-6. 🔨 **CURRENT**: Phase 3B - Senior/Veteran Discounts (~95% complete)
-   - Just finished: DiscountDialog UI with full polish
-   - Next: Update CurrentSalePanel to show discounts in totals
-7. ⏭️ **NEXT**: Phase 3A - Promotional Discounts (after 3B complete)
-8. ⏭️ **FUTURE**: Phase 3C - Coupon Support (after 3A complete)
+6. ✅ **DONE**: Phase 3A - Promotional Discounts (inline display, toast notifications)
+7. ✅ **DONE**: Phase 3B - Senior/Veteran Discounts (totals display, dialog auto-close)
+8. ⏭️ **CURRENT**: Phase 3C - Coupon Support (next priority)
 9. ⏭️ **FUTURE**: Phase 1 deferred items (Lock Screen, Theme Modes) - if needed
 
 ---
@@ -460,11 +544,26 @@ These files contain essential information for Phase 3 integration work.
 - ✅ Error handling strategy defined
 - ✅ Incremental implementation approach (3A → 3B → 3C)
 
-### 🔨 CURRENT WORK & NEXT STEPS
+### ✅ COMPLETED WORK
 
-**Follow the step-by-step plan in `PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md`**
+**Follow the step-by-step plan in `phase_3_on_progress.md`**
 
-#### Phase 3B: Senior/Veteran Discounts 🔨 ~95% COMPLETE
+#### Phase 3A: Promotional Discounts ✅ COMPLETE
+- [x] Created PromotionalDiscountResponse DTO
+- [x] Created DiscountApiClient with calculatePromotionalDiscount method
+- [x] Created ToastNotification UI component with slide-in animation
+- [x] Updated TransactionService with checkAndApplyPromotionalDiscounts()
+- [x] Integrated with Quick Keys and barcode scanner
+- [x] Toast notification shows on discount trigger with product name
+- [x] **Promotional discounts display INLINE below items** (CurrentSalePanel)
+- [x] **Promotional discounts display INLINE below items** (Receipt)
+- [x] Custom TableRow wrapper for mixed row types
+- [x] Custom rendering for discount rows (gray italic, 14pt)
+- [x] Created DISCOUNT_API_DATA_SYNC_PROMPT.md with UPC list
+- [x] Data sync resolved between POS and API
+- [x] All tests passing
+
+#### Phase 3B: Senior/Veteran Discounts ✅ COMPLETE
 - [x] Created separate `transaction_discounts` table (cleaner approach)
 - [x] Created TransactionDiscount entity and DAO
 - [x] Created SeniorVeteranDiscountResponse DTO
@@ -472,26 +571,118 @@ These files contain essential information for Phase 3 integration work.
 - [x] Created DiscountDialog UI with full polish (purple theme, text outlines)
 - [x] Integrated with ActionsPanel and TransactionService
 - [x] Tested senior/veteran discount application and removal
-- [ ] **NEXT:** Update CurrentSalePanel to display discounts in totals section
-- [ ] Final testing and polish
+- [x] Updated CurrentSalePanel to display discounts in totals section
+- [x] **Dialog auto-closes after discount application**
+- [x] Updated Receipt to display discounts in totals section
+- [x] All tests passing
 
-#### Phase 3A: Promotional Discounts (FUTURE - AFTER 3B)
-- Create ToastNotification UI component
-- Update TransactionService for promotional discount logic
-- Integrate with Quick Keys and barcode scanner
-- Show toast notification on discount trigger
-- Test with TB Polar Pop and other promotional items
-
-#### Phase 3C: Coupon Support (FUTURE - AFTER 3A)
-- Implement coupon validation via DiscountDialog "Apply Coupon" button
-- Create coupon entry dialog or reuse on-screen keyboard
-- Integrate with barcode scanner for coupon codes
-- Enforce one coupon per transaction rule
-- Test all 4 coupon codes (SAVE20, ITEM15OFF, EXPIRED10, MEMBER10)
+#### Phase 3C: Coupon Support 🔨 IN PROGRESS
+- [x] Implement coupon validation via DiscountDialog "Apply Coupon" button
+- [x] Create coupon entry dialog with on-screen keyboard
+- [x] Integrate with barcode scanner for coupon codes
+- [x] Enforce one coupon per transaction rule
+- [x] **Deferred validation implemented** - Coupons validate at Total, not Apply
+- [ ] **API REFACTORING NEEDED** - Add `valid` vs `triggered` fields (see hand_off_for_phase_3.md)
+- [ ] **UI UPDATES NEEDED** - Show pending discount status with "Add $X more" message
+- [ ] Test all 4 coupon codes after API refactoring complete
 
 **Reference Documents:**
-- `PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md` - Current progress and detailed steps
+- `phase_3_on_progress.md` - Current progress and detailed steps
 - `hand_off_for_phase_3.md` - API endpoints and integration details
+- `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
+
+---
+
+### Phase 3C: Current Implementation Status (2026-03-23)
+
+#### ✅ COMPLETED - Deferred Coupon Validation
+
+**Problem Solved:**
+Users can now add coupons at any time during cart building. Validation only happens when clicking Total/Pay buttons.
+
+**Implementation Details:**
+
+1. **TransactionService.java:**
+   - Added `pendingCouponCodes` HashMap to track coupon codes (discount_id → coupon_code)
+   - Added `validatePendingCoupons()` method - called before payment
+   - Added `recalculateCouponDiscounts()` - auto-updates discounts as cart changes
+   - Coupon codes stored when `applyCouponDiscount()` called
+   - Map cleared on transaction completion/void
+
+2. **DiscountDialog.java:**
+   - Modified `validateAndApplyCoupon()` to always accept coupons
+   - Shows $0 discount if minimum not met (instead of error dialog)
+   - Only shows errors for expired/invalid codes
+   - Empty cart validation added
+
+3. **PosInterface.java:**
+   - Updated `tryValidateCouponFromScan()` to allow scanned coupons
+   - Shows toast "Will validate at checkout" for pending coupons
+   - Empty cart validation added (silent for barcode scans)
+
+4. **ActionsPanel.java:**
+   - Added `validatePendingCoupons()` call in `handlePayCard()` and `handlePayCash()`
+   - Shows warning dialog and blocks payment if validation fails
+   - Refreshes UI after validation to show updated discounts
+   - Recalculates total AFTER validation (discount amounts may change)
+
+5. **Dialog Styling Updates:**
+   - All simple dialogs (error/warning/success/info) now have:
+     - Bigger text with dynamic scaling (1.4x header, 1.6x body, 1.5x button)
+     - Visible colored OK buttons (opaque, no border)
+     - Responsive sizing (500x300 scaled)
+     - Better padding and layout
+
+**How It Works:**
+1. User applies coupon early (e.g., $75 cart, SAVE20 requires $100)
+2. Coupon added with $0 discount amount
+3. As items added, `recalculateCouponDiscounts()` updates amount automatically
+4. Discount grows from $0 → $20 as cart reaches $100
+5. When user clicks Total, `validatePendingCoupons()` checks all requirements
+6. If valid, payment proceeds; if invalid, shows error and blocks
+
+#### 🔨 TODO - API Refactoring + UI Improvements
+
+**API Changes Needed (Discount Engine):**
+
+See `hand_off_for_phase_3.md` section "API REFACTORING REQUEST" for full details.
+
+Summary:
+- Add `triggered` field to distinguish "coupon exists" from "discount applies"
+- Add `remainingAmount` field for "add $X more" messaging
+- Change `valid` to only check existence + expiration (not minimum purchase)
+- Always return `discountAmount` when `valid: true`
+
+**POS UI Changes Needed:**
+
+1. **CurrentSalePanel Display:**
+   ```
+   Items Subtotal:                    $75.00
+   Coupon: SAVE20 -$20.00 *           $0.00     (grayed out, italic)
+   -----------------------------------------------
+   Subtotal:                          $75.00
+   Tax (7%):                          $5.25
+   Total:                             $80.25
+
+   * Add $25 more to unlock this discount
+   ```
+
+2. **Progressive Disclosure:**
+   - Show potential savings even when not triggered
+   - Display "Add $X more" message below coupon line
+   - Gray out discount amount when `triggered: false`
+   - Highlight discount when `triggered: true`
+
+3. **Toast Notification Updates:**
+   - Change message based on `triggered` status
+   - "SAVE20 applied - You'll save $20" (when triggered)
+   - "SAVE20 applied - Add $25 more to save $20" (when not triggered)
+
+**Benefits:**
+- Motivates customers to add more items
+- Transparent about savings potential
+- Clear progress indicator toward discount unlock
+- Better shopping experience
 
 ---
 
@@ -1092,7 +1283,7 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 
 ---
 
-## 🔨 PHASE 3B IN PROGRESS - Almost Done!
+## 🎉 PHASES 3A & 3B COMPLETE!
 
 **Current Status:**
 - ✅ Discount Engine API running and tested
@@ -1100,25 +1291,33 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - ✅ Integration plan finalized
 - ✅ Database schema created (transaction_discounts table)
 - ✅ DiscountApiClient implemented with all methods
-- ✅ DiscountDialog UI fully polished (purple theme, text outlines)
+- ✅ DiscountDialog UI fully polished (purple theme, text outlines, auto-close)
 - ✅ TransactionService integrated with discount methods
-- ✅ Senior/Veteran discount application and removal working
-- 🔨 **95% Complete** - Just need CurrentSalePanel display update
+- ✅ **Phase 3A (Promotional Discounts) COMPLETE**
+  - Promotional discounts display INLINE below items
+  - Toast notifications with product name
+  - Data sync resolved between POS and API
+- ✅ **Phase 3B (Senior/Veteran Discounts) COMPLETE**
+  - Senior/Veteran discounts display in totals section
+  - Dialog auto-closes after application
+  - Receipt shows all discounts correctly
 
-**Next Immediate Task:**
-- Update `CurrentSalePanel.java` to display active discounts in totals section
-- Format: "Senior Discount (5%): -$X.XX" or "Veteran Discount (10%): -$X.XX"
-- Gray italic text for discount lines
-- Tax calculated on discounted subtotal
+**Display Implementation:**
+- **Promotional discounts**: Inline below items (CurrentSalePanel & Receipt)
+  - Format: "  Buy 2+ Save 25%"
+  - Gray italic 14pt
+- **Senior/Veteran discounts**: In totals section (CurrentSalePanel & Receipt)
+  - Format: "Senior Discount (5%): -$X.XX"
+  - Gray italic 18pt
 
-**After Phase 3B Complete:**
-1. Move to **Phase 3A: Promotional Discounts**
-2. Then **Phase 3C: Coupon Support**
-3. Follow step-by-step guide in `PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md`
+**Next Priority:**
+1. **Phase 3C: Coupon Support**
+2. Follow step-by-step guide in `phase_3_on_progress.md`
 
 **Reference Documents:**
-- `PHASE_3_IMPLEMENTATION_PLAN_ONPROGRESS.md` - Current progress and next steps
+- `phase_3_on_progress.md` - Current progress and next steps
 - `hand_off_for_phase_3.md` - API endpoints, schemas, and integration details
+- `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
 - `COPY_PASTE_PROMPT.md` - This document (project context and decisions)
 
 **Discount Engine API:**
@@ -1128,4 +1327,16 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 
 ---
 
-**Phase 3B nearly complete! Ready for final CurrentSalePanel display update! 🎯**
+**Phases 3A & 3B Complete! Phase 3C In Progress - API Refactoring Needed! 🚀**
+
+**Latest Updates (2026-03-23):**
+- ✅ Deferred coupon validation implemented (validate at Total, not Apply)
+- ✅ Coupons recalculate automatically as cart changes
+- ✅ Dialog styling improved (bigger text, colored buttons)
+- 🔨 API refactoring needed: Add `valid` vs `triggered` fields
+- 🔨 UI improvements pending: Progressive discount display with "Add $X more" messaging
+
+**Next Steps:**
+1. Refactor Discount Engine API (see hand_off_for_phase_3.md)
+2. Update POS UI to show pending discount status
+3. Test all coupon types with new UX flow

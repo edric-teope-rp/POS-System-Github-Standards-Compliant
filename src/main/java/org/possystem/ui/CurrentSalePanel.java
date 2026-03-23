@@ -6,11 +6,14 @@ import org.possystem.service.TransactionService;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Current Sale Panel - Shopping cart with table, totals, and item management
@@ -84,8 +87,11 @@ public class CurrentSalePanel extends JPanel {
         saleTable.getColumnModel().getColumn(2).setPreferredWidth(100); // Price
         saleTable.getColumnModel().getColumn(3).setPreferredWidth(110); // Line Total
 
-        // Set custom renderer for quantity column
+        // Set custom renderers
+        saleTable.getColumnModel().getColumn(0).setCellRenderer(new DiscountAwareTextRenderer());
         saleTable.getColumnModel().getColumn(1).setCellRenderer(new QuantityControlRenderer());
+        saleTable.getColumnModel().getColumn(2).setCellRenderer(new DiscountAwareTextRenderer());
+        saleTable.getColumnModel().getColumn(3).setCellRenderer(new DiscountAwareTextRenderer());
 
         // Totals Display
         subtotalLabel = new JLabel("Subtotal: $0.00");
@@ -133,19 +139,44 @@ public class CurrentSalePanel extends JPanel {
     public void refreshDisplay() {
         try {
             List<TransactionItem> items = transactionService.getCurrentSaleItems();
-            saleTableModel.setItems(items);
+            List<TransactionDiscount> activeDiscounts = transactionService.getActiveDiscounts();
+
+            // Build a map of item_id to promotional discount
+            Map<Integer, TransactionDiscount> itemDiscountMap = new HashMap<>();
+            for (TransactionDiscount discount : activeDiscounts) {
+                if (discount.discountType().equals("PROMOTIONAL") && discount.itemId() != null) {
+                    itemDiscountMap.put(discount.itemId(), discount);
+                }
+            }
+
+            // Build table rows: items + their promotional discounts inline
+            List<TableRow> tableRows = new ArrayList<>();
+            for (TransactionItem item : items) {
+                if (item.status().equals("ACTIVE")) {
+                    // Add item row
+                    tableRows.add(new TableRow(item));
+
+                    // If item has a promotional discount, add discount row right after it
+                    TransactionDiscount discount = itemDiscountMap.get(item.id());
+                    if (discount != null) {
+                        // Calculate percentage (assume discount is percentage-based from API)
+                        double percentage = (Math.abs(discount.discountAmount()) / item.subtotal()) * 100;
+                        String description = String.format("  Buy %d+ Save %.0f%%", item.quantity(), percentage);
+                        tableRows.add(new TableRow(discount, description));
+                    }
+                }
+            }
+
+            saleTableModel.setRows(tableRows);
 
             // Get items subtotal (before discounts)
             double itemsSubtotal = transactionService.getTransactionSubtotal();
             subtotalLabel.setText(String.format("Subtotal: $%.2f", itemsSubtotal));
 
-            // Clear and rebuild discounts panel
+            // Clear and rebuild discounts panel (only non-promotional discounts)
             discountsPanel.removeAll();
 
-            // Get active discounts
-            List<TransactionDiscount> activeDiscounts = transactionService.getActiveDiscounts();
-
-            // Display each discount with gray italic text
+            // Display only Senior/Veteran/Coupon discounts in totals panel
             for (TransactionDiscount discount : activeDiscounts) {
                 String discountText = "";
                 if (discount.discountType().equals("SENIOR")) {
@@ -153,16 +184,23 @@ public class CurrentSalePanel extends JPanel {
                 } else if (discount.discountType().equals("VETERAN")) {
                     discountText = String.format("Veteran Discount (10%%): -$%.2f", Math.abs(discount.discountAmount()));
                 } else if (discount.discountType().equals("COUPON")) {
-                    discountText = String.format("Coupon Discount: -$%.2f", Math.abs(discount.discountAmount()));
-                } else if (discount.discountType().equals("PROMOTIONAL")) {
-                    discountText = String.format("Promotional Discount: -$%.2f", Math.abs(discount.discountAmount()));
+                    // Get the coupon code for this discount
+                    String couponCode = transactionService.getCouponCodeForDiscount(discount.id());
+                    if (couponCode != null && !couponCode.isEmpty()) {
+                        discountText = String.format("Coupon (%s): -$%.2f", couponCode, Math.abs(discount.discountAmount()));
+                    } else {
+                        discountText = String.format("Coupon Discount: -$%.2f", Math.abs(discount.discountAmount()));
+                    }
                 }
+                // Skip PROMOTIONAL - they're now shown in the table
 
-                JLabel discountLabel = new JLabel(discountText);
-                discountLabel.setFont(new Font("Arial", Font.ITALIC, 18));
-                discountLabel.setForeground(new Color(100, 100, 100)); // Gray color
-                discountLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-                discountsPanel.add(discountLabel);
+                if (!discountText.isEmpty()) {
+                    JLabel discountLabel = new JLabel(discountText);
+                    discountLabel.setFont(new Font("Arial", Font.ITALIC, 18));
+                    discountLabel.setForeground(new Color(100, 100, 100)); // Gray color
+                    discountLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    discountsPanel.add(discountLabel);
+                }
             }
 
             // Get discounted subtotal (includes discount amounts)
@@ -187,7 +225,10 @@ public class CurrentSalePanel extends JPanel {
     public Integer getRowSelectedItemId() {
         int selectedRow = saleTable.getSelectedRow();
         if (selectedRow >= 0 && selectedRow < saleTableModel.getRowCount()) {
-            return saleTableModel.getItemAt(selectedRow).id();
+            TransactionItem item = saleTableModel.getItemAt(selectedRow);
+            if (item != null) {
+                return item.id();
+            }
         }
         return null;
     }
@@ -455,24 +496,50 @@ public class CurrentSalePanel extends JPanel {
         });
     }
 
+    // ==== Row Wrapper for Table ====
+    private static class TableRow {
+        enum Type { ITEM, DISCOUNT }
+
+        private final Type type;
+        private final TransactionItem item;
+        private final TransactionDiscount discount;
+        private final String discountDescription;
+
+        // Constructor for item rows
+        public TableRow(TransactionItem item) {
+            this.type = Type.ITEM;
+            this.item = item;
+            this.discount = null;
+            this.discountDescription = null;
+        }
+
+        // Constructor for discount rows
+        public TableRow(TransactionDiscount discount, String description) {
+            this.type = Type.DISCOUNT;
+            this.item = null;
+            this.discount = discount;
+            this.discountDescription = description;
+        }
+
+        public Type getType() { return type; }
+        public TransactionItem getItem() { return item; }
+        public TransactionDiscount getDiscount() { return discount; }
+        public String getDiscountDescription() { return discountDescription; }
+    }
+
     // ==== Custom Table Model ====
     private class SaleTableModel extends AbstractTableModel {
         private final String[] columnNames = {"Item Name", "Qty", "Price", "Line Total"};
-        private List<TransactionItem> items = new ArrayList<>();
+        private List<TableRow> rows = new ArrayList<>();
 
-        public void setItems(List<TransactionItem> newItems) {
-            this.items = new ArrayList<>();
-            for (TransactionItem item : newItems) {
-                if (item.status().equals("ACTIVE")) {
-                    this.items.add(item);
-                }
-            }
+        public void setRows(List<TableRow> newRows) {
+            this.rows = new ArrayList<>(newRows);
             fireTableDataChanged();
         }
 
         @Override
         public int getRowCount() {
-            return items.size();
+            return rows.size();
         }
 
         @Override
@@ -487,15 +554,29 @@ public class CurrentSalePanel extends JPanel {
 
         @Override
         public Object getValueAt(int row, int column) {
-            if (row >= items.size()) return null;
-            TransactionItem item = items.get(row);
-            return switch (column) {
-                case 0 -> item.name();
-                case 1 -> item;
-                case 2 -> String.format("$%.2f", item.unitPrice());
-                case 3 -> String.format("$%.2f", item.subtotal());
-                default -> null;
-            };
+            if (row >= rows.size()) return null;
+            TableRow tableRow = rows.get(row);
+
+            if (tableRow.getType() == TableRow.Type.ITEM) {
+                TransactionItem item = tableRow.getItem();
+                return switch (column) {
+                    case 0 -> item.name();
+                    case 1 -> item;
+                    case 2 -> String.format("$%.2f", item.unitPrice());
+                    case 3 -> String.format("$%.2f", item.subtotal());
+                    default -> null;
+                };
+            } else {
+                // Discount row
+                TransactionDiscount discount = tableRow.getDiscount();
+                return switch (column) {
+                    case 0 -> tableRow.getDiscountDescription();
+                    case 1 -> "";
+                    case 2 -> "";
+                    case 3 -> String.format("-$%.2f", Math.abs(discount.discountAmount()));
+                    default -> null;
+                };
+            }
         }
 
         @Override
@@ -505,16 +586,60 @@ public class CurrentSalePanel extends JPanel {
 
         @Override
         public Class<?> getColumnClass(int column) {
-            if (column == 1) return TransactionItem.class;
+            if (column == 1) return Object.class;
             return String.class;
         }
 
         public TransactionItem getItemAt(int row) {
-            return items.get(row);
+            if (row >= rows.size()) return null;
+            TableRow tableRow = rows.get(row);
+            if (tableRow.getType() == TableRow.Type.ITEM) {
+                return tableRow.getItem();
+            }
+            return null;
+        }
+
+        public boolean isDiscountRow(int row) {
+            if (row >= rows.size()) return false;
+            return rows.get(row).getType() == TableRow.Type.DISCOUNT;
         }
     }
 
     // ==== Custom Cell Renderers ====
+    private class DiscountAwareTextRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value,
+                                                       boolean isSelected, boolean hasFocus,
+                                                       int row, int column) {
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+            // Check if this is a discount row
+            if (saleTableModel.isDiscountRow(row)) {
+                setFont(new Font("Arial", Font.ITALIC, 14));
+                setForeground(new Color(100, 100, 100)); // Gray
+
+                // Override selection colors for discount rows
+                if (isSelected) {
+                    setBackground(table.getSelectionBackground());
+                } else {
+                    setBackground(table.getBackground());
+                }
+            } else {
+                // Regular item row
+                setFont(new Font("Arial", Font.PLAIN, 16));
+                if (isSelected) {
+                    setForeground(table.getSelectionForeground());
+                    setBackground(table.getSelectionBackground());
+                } else {
+                    setForeground(table.getForeground());
+                    setBackground(table.getBackground());
+                }
+            }
+
+            return c;
+        }
+    }
+
     private class QuantityControlRenderer extends JPanel implements TableCellRenderer {
         private final JLabel qtyLabel;
 
@@ -532,7 +657,10 @@ public class CurrentSalePanel extends JPanel {
         public Component getTableCellRendererComponent(JTable table, Object value,
                                                        boolean isSelected, boolean hasFocus,
                                                        int row, int column) {
-            if (value instanceof TransactionItem item) {
+            // Check if this is a discount row
+            if (saleTableModel.isDiscountRow(row)) {
+                qtyLabel.setText("");
+            } else if (value instanceof TransactionItem item) {
                 qtyLabel.setText(String.valueOf(item.quantity()));
             }
 

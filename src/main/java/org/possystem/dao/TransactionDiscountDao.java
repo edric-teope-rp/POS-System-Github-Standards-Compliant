@@ -172,6 +172,19 @@ public class TransactionDiscountDao {
     }
 
     /**
+     * Delete a specific discount by ID (soft delete by setting status to REMOVED).
+     * @param id The discount ID
+     * @throws SQLException if database operation fails
+     */
+    public void deleteById(int id) throws SQLException {
+        String sql = "UPDATE transaction_discounts SET status = 'REMOVED' WHERE id = ?";
+        Connection conn = DatabaseManager.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setInt(1, id);
+        stmt.executeUpdate();
+    }
+
+    /**
      * Get the total discount amount for a transaction.
      * @param transactionId The transaction ID
      * @return The sum of all active discount amounts (negative value)
