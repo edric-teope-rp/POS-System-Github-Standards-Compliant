@@ -237,6 +237,15 @@ public class CurrentSalePanel extends JPanel {
         return saleTable.getSelectedRow() >= 0;
     }
 
+    public boolean hasItemSelected() {
+        int selectedRow = saleTable.getSelectedRow();
+        if (selectedRow >= 0 && selectedRow < saleTableModel.getRowCount()) {
+            // Check if selected row is an item (not a discount)
+            return !saleTableModel.isDiscountRow(selectedRow);
+        }
+        return false;
+    }
+
     public void setEditingEnabled(boolean enabled) {
         this.editingEnabled = enabled;
 
