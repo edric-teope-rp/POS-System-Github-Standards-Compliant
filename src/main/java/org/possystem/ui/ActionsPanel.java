@@ -13,7 +13,9 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Actions Panel - Transaction actions and payment buttons
@@ -49,12 +51,15 @@ public class ActionsPanel extends JPanel {
     private JButton totalButton;
     private JButton paymentVoidButton;
     private JButton discountButton;
+    private GlobalBarcodeScanner globalScanner;
 
     public ActionsPanel(PriceBookService priceBookService, TransactionService transactionService,
-                       DiscountApiClient discountApiClient, Runnable onSaleRefresh) {
+                       DiscountApiClient discountApiClient, GlobalBarcodeScanner globalScanner,
+                       Runnable onSaleRefresh) {
         this.priceBookService = priceBookService;
         this.transactionService = transactionService;
         this.discountApiClient = discountApiClient;
+        this.globalScanner = globalScanner;
         this.onSaleRefresh = onSaleRefresh;
 
         setLayout(new BorderLayout(5, 5));
@@ -453,6 +458,12 @@ public class ActionsPanel extends JPanel {
                 return;
             }
 
+            // Check if any coupons are not triggered (informational only, non-blocking)
+            String couponWarning = transactionService.checkUntriggeredCoupons();
+            if (couponWarning != null) {
+                showWarningDialog("Coupon Not Applied", "Minimum Purchase Not Met", couponWarning);
+            }
+
             // Finalize the basket - disable transaction controls and enable payment buttons
             setTransactionControlsEnabled(false);
             setPaymentButtonsEnabled(true);
@@ -542,6 +553,17 @@ public class ActionsPanel extends JPanel {
                 showInfoDialog("Cart is Empty", "Cannot Process Payment", "The cart is empty. Add items to start a transaction.");
                 return;
             }
+
+            // Remove untriggered coupons before payment (silently)
+            transactionService.removeUntriggeredCoupons();
+
+            // Refresh UI to show updated discount amounts
+            if (onSaleRefresh != null) {
+                onSaleRefresh.run();
+            }
+
+            // Recalculate total AFTER removing untriggered coupons
+            total = transactionService.getTransactionTotal();
 
             boolean confirmed = showConfirmDialog(
                 "Card Payment",
@@ -904,6 +926,17 @@ public class ActionsPanel extends JPanel {
                 return;
             }
 
+            // Remove untriggered coupons before payment (silently)
+            transactionService.removeUntriggeredCoupons();
+
+            // Refresh UI to show updated discount amounts
+            if (onSaleRefresh != null) {
+                onSaleRefresh.run();
+            }
+
+            // Recalculate total AFTER removing untriggered coupons
+            total = transactionService.getTransactionTotal();
+
             // Show cash payment options dialog
             showCashPaymentOptionsDialog(total);
         } catch (SQLException e) {
@@ -1195,15 +1228,36 @@ public class ActionsPanel extends JPanel {
         StringBuilder receipt = new StringBuilder();
         receipt.append("=================== RECEIPT ===================\n\n");
 
-        // Display items
+        // Build a map of item_id to promotional discount
+        Map<Integer, TransactionDiscount> itemDiscountMap = new HashMap<>();
+        if (discounts != null) {
+            for (TransactionDiscount discount : discounts) {
+                if (discount.discountType().equals("PROMOTIONAL") && discount.itemId() != null) {
+                    itemDiscountMap.put(discount.itemId(), discount);
+                }
+            }
+        }
+
+        // Display items with inline promotional discounts
         double itemsTotal = 0.0;
         for (TransactionItem item : items) {
             if (item.status().equals("ACTIVE")) {
                 receipt.append(String.format("%-34s x%-2d\n",
                     item.name().substring(0, Math.min(34, item.name().length())),
                     item.quantity()));
-                receipt.append(String.format("  $%-8.2f ea.                  $%-8.2f\n\n",
+                receipt.append(String.format("  $%-8.2f ea.                  $%-8.2f\n",
                     item.unitPrice(), item.subtotal()));
+
+                // Check if item has a promotional discount
+                TransactionDiscount promoDiscount = itemDiscountMap.get(item.id());
+                if (promoDiscount != null) {
+                    // Calculate percentage for display
+                    double percentage = (Math.abs(promoDiscount.discountAmount()) / item.subtotal()) * 100;
+                    String discountDesc = String.format("  Buy %d+ Save %.0f%%", item.quantity(), percentage);
+                    receipt.append(String.format("%-36s -$%-8.2f\n", discountDesc, Math.abs(promoDiscount.discountAmount())));
+                }
+
+                receipt.append("\n");
                 itemsTotal += item.subtotal();
             }
         }
@@ -1213,8 +1267,9 @@ public class ActionsPanel extends JPanel {
         // Show items subtotal
         receipt.append(String.format("Items Subtotal:                     $%-8.2f\n", itemsTotal));
 
-        // Show discounts if any
+        // Show only cart-level discounts (Senior/Veteran/Coupon) in totals section
         if (discounts != null && !discounts.isEmpty()) {
+            boolean hasCartLevelDiscounts = false;
             for (TransactionDiscount discount : discounts) {
                 String discountLabel = "";
                 if (discount.discountType().equals("SENIOR")) {
@@ -1222,13 +1277,31 @@ public class ActionsPanel extends JPanel {
                 } else if (discount.discountType().equals("VETERAN")) {
                     discountLabel = "Veteran Discount (10%):";
                 } else if (discount.discountType().equals("COUPON")) {
-                    discountLabel = "Coupon Discount:";
-                } else if (discount.discountType().equals("PROMOTIONAL")) {
-                    discountLabel = "Promotional Discount:";
+                    // Get the coupon code for this discount
+                    String couponCode = transactionService.getCouponCodeForDiscount(discount.id());
+
+                    // DEBUG: Log coupon code retrieval
+                    System.out.println("=== RECEIPT COUPON CODE DEBUG ===");
+                    System.out.println("Discount ID: " + discount.id());
+                    System.out.println("Retrieved Coupon Code: " + (couponCode != null ? couponCode : "null"));
+                    System.out.println("================================");
+
+                    if (couponCode != null && !couponCode.isEmpty()) {
+                        discountLabel = String.format("Coupon (%s):", couponCode);
+                    } else {
+                        discountLabel = "Coupon Discount:";
+                    }
                 }
-                receipt.append(String.format("%-36s -$%-8.2f\n", discountLabel, Math.abs(discount.discountAmount())));
+                // Skip PROMOTIONAL - already shown inline with items
+
+                if (!discountLabel.isEmpty()) {
+                    receipt.append(String.format("%-36s -$%-8.2f\n", discountLabel, Math.abs(discount.discountAmount())));
+                    hasCartLevelDiscounts = true;
+                }
             }
-            receipt.append("-----------------------------------------------\n");
+            if (hasCartLevelDiscounts) {
+                receipt.append("-----------------------------------------------\n");
+            }
         }
 
         receipt.append(String.format("Subtotal:                           $%-8.2f\n", subtotal));
@@ -1961,6 +2034,7 @@ public class ActionsPanel extends JPanel {
             parentWindow,
             transactionService,
             discountApiClient,
+            globalScanner,  // Pass scanner to disable during coupon entry
             onSaleRefresh  // Refresh the sale display after discount applied
         );
         dialog.setVisible(true);

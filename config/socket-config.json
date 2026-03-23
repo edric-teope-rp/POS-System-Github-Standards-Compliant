@@ -112,6 +112,11 @@
       "posName": "Raya",
       "ipAddress": "192.168.8.224",
       "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
     }
   ]
 }
