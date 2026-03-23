@@ -69,8 +69,8 @@ public class ActionsPanel extends JPanel {
         layoutComponents();
         attachEventHandlers();
 
-        // Initialize focus for barcode scanner (needs to be done after layout)
-        SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+        // NOTE: ActionsPanel barcode scanner DISABLED - GlobalBarcodeScanner handles all scanning
+        // SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
     }
 
     private void initializeComponents() {
@@ -175,6 +175,15 @@ public class ActionsPanel extends JPanel {
         applyTextOutline(totalButton);
         applyTextOutline(discountButton);
 
+        // Prevent buttons from receiving keyboard focus (POS is scan/touch operated)
+        changeQtyButton.setFocusable(false);
+        voidTransactionButton.setFocusable(false);
+        payCashButton.setFocusable(false);
+        payCardButton.setFocusable(false);
+        deleteSelectedButton.setFocusable(false);
+        totalButton.setFocusable(false);
+        discountButton.setFocusable(false);
+
         // Initially disable payment buttons
         payCashButton.setEnabled(false);
         payCardButton.setEnabled(false);
@@ -252,6 +261,7 @@ public class ActionsPanel extends JPanel {
         paymentVoidButton.setForeground(Color.WHITE);
         paymentVoidButton.setFont(new Font("Arial", Font.BOLD, 16));
         applyTextOutline(paymentVoidButton);
+        paymentVoidButton.setFocusable(false);
         paymentVoidButton.setEnabled(false);
 
         paymentButtonsGrid.add(paymentVoidButton);
@@ -282,7 +292,9 @@ public class ActionsPanel extends JPanel {
     }
 
     private void attachEventHandlers() {
-        // Barcode Scanner Field - Auto-detect when scanning completes
+        // NOTE: ActionsPanel barcode scanner DISABLED - GlobalBarcodeScanner handles all scanning
+        // The barcodeScannerField is kept in the UI but no longer processes scans
+        /*
         barcodeScannerField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -304,6 +316,7 @@ public class ActionsPanel extends JPanel {
                 scanCompleteTimer.restart();
             }
         });
+        */
 
         // Action buttons - deleteSelectedButton and changeQtyButton are wired via callbacks
         voidTransactionButton.addActionListener(e -> handleVoidTransaction());
@@ -315,10 +328,22 @@ public class ActionsPanel extends JPanel {
     }
 
     /**
-     * Process barcode scan when scan detection completes
-     * Implements duplicate prevention and auto-add functionality
+     * DEPRECATED: Process barcode scan when scan detection completes
+     * NOTE: This method is NO LONGER USED - GlobalBarcodeScanner handles all scanning
+     * Kept for reference but disabled to prevent conflicts
      */
+    @Deprecated
     private void processScan() {
+        // DISABLED: GlobalBarcodeScanner handles all product and coupon scanning
+        // This local scanner is no longer active to prevent:
+        // - Redundant database queries
+        // - Conflicting error dialogs for coupons
+        // - Duplicate processing
+
+        // If you need to re-enable local scanning, uncomment the code below
+        // and disable GlobalBarcodeScanner in PosInterface.java
+
+        /*
         String scannedUPC = barcodeScannerField.getText().trim();
 
         // Ignore empty scans
@@ -371,6 +396,7 @@ public class ActionsPanel extends JPanel {
             barcodeScannerField.setText("");
             barcodeScannerField.requestFocusInWindow();
         }
+        */
     }
 
     /**
@@ -1320,7 +1346,8 @@ public class ActionsPanel extends JPanel {
             if (onSaleRefresh != null) {
                 onSaleRefresh.run();
             }
-            barcodeScannerField.setText("");
+            // NOTE: barcodeScannerField no longer used - GlobalBarcodeScanner handles scanning
+            // barcodeScannerField.setText("");
 
             resetButtonStatesForNewTransaction();
 
@@ -1972,11 +1999,12 @@ public class ActionsPanel extends JPanel {
     }
 
     private void setTransactionControlsEnabled(boolean enabled) {
-        barcodeScannerField.setEnabled(enabled);
-        if (enabled) {
-            // Re-focus scanner field when re-enabled
-            SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
-        }
+        // NOTE: barcodeScannerField no longer used - GlobalBarcodeScanner handles scanning
+        // barcodeScannerField.setEnabled(enabled);
+        // if (enabled) {
+        //     // Re-focus scanner field when re-enabled
+        //     SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+        // }
         changeQtyButton.setEnabled(false);
         changeQtyButton.repaint();
         deleteSelectedButton.setEnabled(false);
@@ -2020,7 +2048,8 @@ public class ActionsPanel extends JPanel {
     }
 
     public void returnFocusToScanner() {
-        SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+        // NOTE: barcodeScannerField no longer used - GlobalBarcodeScanner handles scanning
+        // SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
     }
 
     /**

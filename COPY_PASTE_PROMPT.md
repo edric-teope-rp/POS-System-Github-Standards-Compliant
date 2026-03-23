@@ -24,7 +24,7 @@ These files contain essential information for Phase 3 integration work.
 - **Main Branch**: main
 - **Build**: ✅ Successful
 - **Tech**: Java 25, Gradle, H2 Database, Swing GUI, SLF4J+Logback, Gson (for JSON)
-- **Status**: Phase 1 ✅ COMPLETE, Phase 2 ✅ COMPLETE, **Phase 3A ✅ COMPLETE, Phase 3B ✅ COMPLETE**, **Phase 3C ⏭️ NEXT**
+- **Status**: Phase 1 ✅ COMPLETE, Phase 2 ✅ COMPLETE, **Phase 3A ✅ COMPLETE, Phase 3B ✅ COMPLETE, Phase 3C ✅ COMPLETE**
 
 ---
 
@@ -75,7 +75,7 @@ These files contain essential information for Phase 3 integration work.
 
 ---
 
-### PHASE 3: Discount Service (Spring Boot REST API) ✅ Phases 3A & 3B COMPLETE! - Phase 3C NEXT
+### PHASE 3: Discount Service (Spring Boot REST API) ✅ ALL PHASES COMPLETE!
 
 - **Discount Engine API**: ✅ Complete and running at `/Users/ed/IdeaProjects/discount-engine-api`
 - **API Base URL**: `http://localhost:8080/api/discounts`
@@ -83,7 +83,7 @@ These files contain essential information for Phase 3 integration work.
 - **Current Status**:
   - **Phase 3A (Promotional Discounts)**: ✅ COMPLETE
   - **Phase 3B (Senior/Veteran Discounts)**: ✅ COMPLETE
-  - **Phase 3C (Coupon Support)**: ⏭️ NEXT
+  - **Phase 3C (Coupon Support)**: ✅ COMPLETE
 - **Planning Document**: See `phase_3_on_progress.md` for current progress and next steps
 - **API Reference**: See `hand_off_for_phase_3.md` for API endpoints and schemas
 
@@ -109,6 +109,92 @@ These files contain essential information for Phase 3 integration work.
 ---
 
 ## RECENT WORK COMPLETED (Latest Session)
+
+### v3.4 - Phase 3C COMPLETE! (2026-03-23) ✅
+
+#### Phase 3C: Coupon Support - PRODUCTION READY ✅
+
+✅ **Refactored Discount Engine API Integration:**
+- Updated `CouponValidationResponse` DTO with new fields: `triggered`, `remainingAmount`, `errorType`
+- API now separates `valid` (coupon exists/not expired) from `triggered` (minimum purchase met)
+- Progressive disclosure pattern: Accept coupons early, validate at Total
+
+✅ **Empty Cart Validation:**
+- Dummy data approach: Sends $0.01 validation item to API when cart is empty
+- Validates coupon existence without requiring items in cart
+- Rejects invalid codes (e.g., "FAKEXXXX") with proper error messages
+- Accepts valid coupons with $0.00 discount (recalculates when items added)
+
+✅ **Triggered Flag Implementation (Option 1):**
+- Added check for `triggered` field when applying coupons to non-empty carts
+- Prevents premature discount application (e.g., $0.99 item + ITEM15OFF doesn't make cart $0)
+- Discount amount = $0.00 when `triggered: false`
+- Discount amount = API value when `triggered: true`
+- Fixes "Nothing to Total" issue with low-priced items
+
+✅ **Progressive Threshold Crossing:**
+- `recalculateCouponDiscounts()` auto-updates discounts as cart changes
+- Coupon starts at $0.00, grows to full discount when minimum reached
+- Real-time updates in Current Sale panel
+- Seamless UX for building cart with coupon already applied
+
+✅ **Payment Flow:**
+- Non-blocking warning dialog at Total if minimum not met (yellow/amber)
+- Payment buttons remain ENABLED (allows customer to proceed or add items)
+- `removeUntriggeredCoupons()` silently removes invalid coupons before payment
+- Receipt only shows triggered discounts
+
+✅ **Receipt Enhancement:**
+- Fixed HashMap persistence issue (was being cleared before receipt generation)
+- Receipt now shows specific coupon codes: "Coupon (SAVE20): -$2.50"
+- HashMap persists through receipt generation, cleared only on new transaction
+
+✅ **Discount Dialog Height Increase:**
+- Increased dialog height from 32% to 38% of screen (minimum 300px → 360px)
+- Better spacing for multiple discounts (Senior/Veteran + Coupon)
+- Remove buttons clearly visible without cramming
+
+✅ **Single Scanner Architecture:**
+- **DISABLED ActionsPanel's redundant barcode scanner**
+- GlobalBarcodeScanner is now the ONLY active scanner
+- Handles both products AND coupons via single handler
+- Eliminated conflicting "Product Not Found" dialogs for coupons
+- Eliminated redundant database queries (was querying twice per scan)
+- Cleaner architecture: Single source of truth for all scanning
+
+✅ **Toast Notifications:**
+- Success toast on coupon application (manual or barcode)
+- Format: "SAVE20 applied"
+- Non-intrusive, auto-dismiss
+
+✅ **Debug Logging:**
+- Comprehensive HashMap lifecycle tracking
+- Coupon validation debug output
+- Empty cart detection logging
+- Triggered/not triggered status logging
+
+✅ **All Coupon Types Tested:**
+- SAVE20 (percentage, $20 minimum) ✅
+- ITEM15OFF ($1.50 off highest item, $2 minimum) ✅
+- MEMBER10 (10% off, no minimum) ✅
+- EXPIRED10 (expired for testing) ✅
+
+✅ **Test Scenarios Passed:**
+- Empty cart + coupon ✅
+- Below minimum + coupon ✅
+- Above minimum + coupon ✅
+- Progressive threshold crossing ✅
+- Invalid coupon rejection ✅
+- Expired coupon rejection ✅
+- Receipt shows specific codes ✅
+- Payment with untriggered coupon ✅
+- Senior/Veteran + Coupon stacking ✅
+- One coupon per transaction rule ✅
+- Barcode scanning (products + coupons) ✅
+
+**Status:** Phase 3C PRODUCTION READY! 🎉
+
+---
 
 ### v3.3 - Phase 3A & 3B COMPLETE! (2026-03-21) ✅
 
@@ -340,14 +426,16 @@ These files contain essential information for Phase 3 integration work.
 
 ## SYSTEM ARCHITECTURE
 
-### Global Barcode Scanner (NEW)
+### Global Barcode Scanner (SINGLE SCANNER ARCHITECTURE)
 - Application-level keyboard interception via `KeyEventDispatcher`
 - Detects rapid typing patterns (scanner signature)
-- Automatic item lookup and addition
+- **Handles ALL scanning**: Products AND Coupons (single handler)
+- Automatic item lookup with fallback to coupon validation
 - **State management**: ENABLED / DISABLED_FINALIZED / DISABLED_DIALOG
 - Excludes specific dialogs: Change Qty keypad, Socket Configuration
 - Maintains duplicate prevention and scan indicators
 - No focus management required - works universally
+- **ActionsPanel's local scanner DISABLED** (no longer needed, eliminates conflicts)
 
 ### Current Sale Table (Simplified)
 - **4 columns**: Item Name, Qty, Price, Line Total
@@ -507,8 +595,9 @@ These files contain essential information for Phase 3 integration work.
 5. ✅ **DONE**: Phase 3 Integration Planning Complete (all decisions finalized)
 6. ✅ **DONE**: Phase 3A - Promotional Discounts (inline display, toast notifications)
 7. ✅ **DONE**: Phase 3B - Senior/Veteran Discounts (totals display, dialog auto-close)
-8. ⏭️ **CURRENT**: Phase 3C - Coupon Support (next priority)
-9. ⏭️ **FUTURE**: Phase 1 deferred items (Lock Screen, Theme Modes) - if needed
+8. ✅ **DONE**: Phase 3C - Coupon Support (progressive disclosure, empty cart validation, single scanner)
+9. 🎉 **COMPLETE**: All 3 Phases PRODUCTION READY!
+10. ⏭️ **FUTURE**: Phase 1 deferred items (Lock Screen, Theme Modes) - if needed
 
 ---
 
@@ -576,15 +665,20 @@ These files contain essential information for Phase 3 integration work.
 - [x] Updated Receipt to display discounts in totals section
 - [x] All tests passing
 
-#### Phase 3C: Coupon Support 🔨 IN PROGRESS
+#### Phase 3C: Coupon Support ✅ COMPLETE
 - [x] Implement coupon validation via DiscountDialog "Apply Coupon" button
 - [x] Create coupon entry dialog with on-screen keyboard
 - [x] Integrate with barcode scanner for coupon codes
 - [x] Enforce one coupon per transaction rule
-- [x] **Deferred validation implemented** - Coupons validate at Total, not Apply
-- [ ] **API REFACTORING NEEDED** - Add `valid` vs `triggered` fields (see hand_off_for_phase_3.md)
-- [ ] **UI UPDATES NEEDED** - Show pending discount status with "Add $X more" message
-- [ ] Test all 4 coupon codes after API refactoring complete
+- [x] Progressive disclosure pattern (accept early, validate at Total)
+- [x] API Integration with `valid` vs `triggered` fields
+- [x] Empty cart validation with dummy data approach
+- [x] Triggered flag checking (Option 1) to prevent premature discounts
+- [x] Receipt shows specific coupon codes (not generic "Coupon Discount")
+- [x] Non-blocking payment flow with warning dialogs
+- [x] Auto-recalculation as cart crosses minimum threshold
+- [x] Single scanner architecture (GlobalBarcodeScanner only)
+- [x] Test all 4 coupon codes (SAVE20, ITEM15OFF, MEMBER10, EXPIRED10)
 
 **Reference Documents:**
 - `phase_3_on_progress.md` - Current progress and detailed steps
@@ -593,9 +687,9 @@ These files contain essential information for Phase 3 integration work.
 
 ---
 
-### Phase 3C: Current Implementation Status (2026-03-23)
+### Phase 3C: Final Implementation Status (2026-03-23) ✅ COMPLETE
 
-#### ✅ COMPLETED - Deferred Coupon Validation
+#### ✅ PRODUCTION READY - Progressive Coupon Validation
 
 **Problem Solved:**
 Users can now add coupons at any time during cart building. Validation only happens when clicking Total/Pay buttons.
@@ -634,55 +728,37 @@ Users can now add coupons at any time during cart building. Validation only happ
      - Better padding and layout
 
 **How It Works:**
-1. User applies coupon early (e.g., $75 cart, SAVE20 requires $100)
-2. Coupon added with $0 discount amount
+1. User applies coupon early (e.g., $15 cart, SAVE20 requires $20)
+2. Coupon added with $0 discount amount (triggered: false)
 3. As items added, `recalculateCouponDiscounts()` updates amount automatically
-4. Discount grows from $0 → $20 as cart reaches $100
-5. When user clicks Total, `validatePendingCoupons()` checks all requirements
-6. If valid, payment proceeds; if invalid, shows error and blocks
+4. Discount grows from $0 → full amount as cart reaches minimum
+5. When user clicks Total, warning shown if minimum not met (non-blocking)
+6. Payment proceeds - untriggered coupons silently removed before processing
+7. Receipt shows only triggered discounts with specific coupon codes
 
-#### 🔨 TODO - API Refactoring + UI Improvements
+#### ✅ COMPLETED - Single Scanner Architecture
 
-**API Changes Needed (Discount Engine):**
+**Problem Solved:**
+Eliminated redundant ActionsPanel barcode scanner that was causing conflicts.
 
-See `hand_off_for_phase_3.md` section "API REFACTORING REQUEST" for full details.
+**Implementation:**
+1. **GlobalBarcodeScanner**: Now the ONLY active scanner
+   - Handles products (primary path)
+   - Handles coupons (fallback path via error handler)
+   - Universal keyboard interception
 
-Summary:
-- Add `triggered` field to distinguish "coupon exists" from "discount applies"
-- Add `remainingAmount` field for "add $X more" messaging
-- Change `valid` to only check existence + expiration (not minimum purchase)
-- Always return `discountAmount` when `valid: true`
-
-**POS UI Changes Needed:**
-
-1. **CurrentSalePanel Display:**
-   ```
-   Items Subtotal:                    $75.00
-   Coupon: SAVE20 -$20.00 *           $0.00     (grayed out, italic)
-   -----------------------------------------------
-   Subtotal:                          $75.00
-   Tax (7%):                          $5.25
-   Total:                             $80.25
-
-   * Add $25 more to unlock this discount
-   ```
-
-2. **Progressive Disclosure:**
-   - Show potential savings even when not triggered
-   - Display "Add $X more" message below coupon line
-   - Gray out discount amount when `triggered: false`
-   - Highlight discount when `triggered: true`
-
-3. **Toast Notification Updates:**
-   - Change message based on `triggered` status
-   - "SAVE20 applied - You'll save $20" (when triggered)
-   - "SAVE20 applied - Add $25 more to save $20" (when not triggered)
+2. **ActionsPanel Scanner**: DISABLED
+   - DocumentListener commented out
+   - processScan() method deprecated
+   - Focus management removed
+   - Keeps UI element dormant for potential future use
 
 **Benefits:**
-- Motivates customers to add more items
-- Transparent about savings potential
-- Clear progress indicator toward discount unlock
-- Better shopping experience
+- No redundant database queries (was querying twice per scan)
+- No conflicting error dialogs (was showing "Product Not Found" for coupons)
+- Cleaner codebase (single source of truth)
+- Better performance (single query per scan)
+- Better UX (silent fail for invalid codes, no annoying popups)
 
 ---
 
@@ -1283,7 +1359,7 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 
 ---
 
-## 🎉 PHASES 3A & 3B COMPLETE!
+## 🎉 ALL PHASE 3 COMPLETE - PRODUCTION READY!
 
 **Current Status:**
 - ✅ Discount Engine API running and tested
@@ -1291,7 +1367,7 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - ✅ Integration plan finalized
 - ✅ Database schema created (transaction_discounts table)
 - ✅ DiscountApiClient implemented with all methods
-- ✅ DiscountDialog UI fully polished (purple theme, text outlines, auto-close)
+- ✅ DiscountDialog UI fully polished (purple theme, text outlines, auto-close, increased height)
 - ✅ TransactionService integrated with discount methods
 - ✅ **Phase 3A (Promotional Discounts) COMPLETE**
   - Promotional discounts display INLINE below items
@@ -1301,6 +1377,14 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
   - Senior/Veteran discounts display in totals section
   - Dialog auto-closes after application
   - Receipt shows all discounts correctly
+- ✅ **Phase 3C (Coupon Support) COMPLETE**
+  - Progressive disclosure pattern implemented
+  - Empty cart validation with dummy data
+  - Triggered flag checking prevents premature discounts
+  - Receipt shows specific coupon codes (e.g., "Coupon (SAVE20)")
+  - Non-blocking payment flow with warning dialogs
+  - Single scanner architecture (GlobalBarcodeScanner only)
+  - All 4 coupon types tested and working
 
 **Display Implementation:**
 - **Promotional discounts**: Inline below items (CurrentSalePanel & Receipt)
@@ -1309,13 +1393,17 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - **Senior/Veteran discounts**: In totals section (CurrentSalePanel & Receipt)
   - Format: "Senior Discount (5%): -$X.XX"
   - Gray italic 18pt
+- **Coupon discounts**: In totals section with specific codes
+  - Format: "Coupon (SAVE20): -$2.50"
+  - Gray italic 18pt
 
-**Next Priority:**
-1. **Phase 3C: Coupon Support**
-2. Follow step-by-step guide in `phase_3_on_progress.md`
+**Scanner Architecture:**
+- **GlobalBarcodeScanner**: Single handler for ALL scanning (products + coupons)
+- **ActionsPanel scanner**: DISABLED (no longer needed, eliminates conflicts)
+- **Benefits**: No duplicate queries, no conflicting error dialogs, cleaner codebase
 
 **Reference Documents:**
-- `phase_3_on_progress.md` - Current progress and next steps
+- `phase_3_on_progress.md` - Implementation history and progress tracking
 - `hand_off_for_phase_3.md` - API endpoints, schemas, and integration details
 - `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
 - `COPY_PASTE_PROMPT.md` - This document (project context and decisions)
@@ -1327,16 +1415,29 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 
 ---
 
-**Phases 3A & 3B Complete! Phase 3C In Progress - API Refactoring Needed! 🚀**
+**🎉 Phase 3 COMPLETE - All Features Production Ready! 🚀**
 
-**Latest Updates (2026-03-23):**
-- ✅ Deferred coupon validation implemented (validate at Total, not Apply)
-- ✅ Coupons recalculate automatically as cart changes
-- ✅ Dialog styling improved (bigger text, colored buttons)
-- 🔨 API refactoring needed: Add `valid` vs `triggered` fields
-- 🔨 UI improvements pending: Progressive discount display with "Add $X more" messaging
+**Latest Release (2026-03-23) - v3.4:**
+- ✅ Coupon support with progressive disclosure
+- ✅ Empty cart validation (accepts coupons early, validates with dummy data)
+- ✅ Triggered flag implementation (prevents $0 cart totals)
+- ✅ Receipt enhancement (specific coupon codes displayed)
+- ✅ Single scanner architecture (GlobalBarcodeScanner exclusive)
+- ✅ Dialog height increased for multiple discounts
+- ✅ All coupon types tested (SAVE20, ITEM15OFF, MEMBER10, EXPIRED10)
+- ✅ Non-blocking payment flow with informational warnings
+- ✅ Auto-recalculation as cart crosses minimum thresholds
 
-**Next Steps:**
-1. Refactor Discount Engine API (see hand_off_for_phase_3.md)
-2. Update POS UI to show pending discount status
-3. Test all coupon types with new UX flow
+**System Features:**
+- ✅ Promotional discounts (automatic, inline display)
+- ✅ Senior/Veteran discounts (manual, totals display)
+- ✅ Coupon support (manual + barcode, progressive validation)
+- ✅ Discount stacking (all types can combine)
+- ✅ Toast notifications (non-intrusive success feedback)
+- ✅ Global barcode scanning (products + coupons)
+- ✅ Multi-POS journal viewer (Phase 2)
+- ✅ Transaction management (Phase 1)
+
+**Next Phase:**
+- Phase 1 deferred items (Lock Screen, Theme Modes) - if needed
+- System is fully functional for production use!

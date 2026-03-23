@@ -1,5 +1,6 @@
 package org.possystem.ui;
 
+import org.possystem.config.ConfigManager;
 import org.possystem.service.PriceBookService;
 import org.possystem.service.TransactionService;
 import org.possystem.service.DiscountApiClient;
@@ -16,6 +17,7 @@ import java.util.List;
 public class PosInterface extends JFrame {
 
     // Services
+    private final ConfigManager configManager;
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
     private final DiscountApiClient discountApiClient;
@@ -28,9 +30,10 @@ public class PosInterface extends JFrame {
     private ActionsPanel actionsPanel;
 
     public PosInterface() {
+        this.configManager = new ConfigManager();
         this.priceBookService = new PriceBookService();
         this.transactionService = new TransactionService();
-        this.discountApiClient = new DiscountApiClient(); // Default URL: http://localhost:8080/api/discounts
+        this.discountApiClient = new DiscountApiClient(configManager.getDiscountApiUrl());
         this.socketService = new SocketService("config/socket-config.json");
 
         // Wire socket service to transaction service for journal broadcasting
@@ -604,6 +607,22 @@ public class PosInterface extends JFrame {
         });
         applyRoundedStyle(socketPortButton);
 
+        // API Configuration Button
+        JButton apiConfigButton = new JButton("API Configuration");
+        apiConfigButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
+        apiConfigButton.setPreferredSize(new Dimension(0, buttonHeight));
+        apiConfigButton.setBackground(new Color(102, 51, 153)); // Purple
+        apiConfigButton.setForeground(Color.WHITE);
+        apiConfigButton.setFocusPainted(false);
+        apiConfigButton.setBorderPainted(true);
+        apiConfigButton.setOpaque(true);
+        apiConfigButton.setHorizontalAlignment(SwingConstants.CENTER);
+        apiConfigButton.addActionListener(e -> {
+            settingsDialog.dispose();
+            showApiConfigDialog();
+        });
+        applyRoundedStyle(apiConfigButton);
+
         // Theme buttons
         lightModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         lightModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
@@ -633,10 +652,15 @@ public class PosInterface extends JFrame {
         centerPanel.add(separatorPanel);
         centerPanel.add(Box.createRigidArea(new Dimension(0, 20)));
 
-        // Configuration button
+        // Configuration buttons
         socketPortButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         socketPortButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
         centerPanel.add(socketPortButton);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+
+        apiConfigButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        apiConfigButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
+        centerPanel.add(apiConfigButton);
 
         settingsDialog.add(centerPanel, BorderLayout.CENTER);
 
@@ -649,11 +673,11 @@ public class PosInterface extends JFrame {
     }
 
     private void updateDeleteSelectedButton() {
-        boolean hasRowSelection = currentSalePanel.hasRowSelection();
+        // Enable buttons only if an ITEM row is selected (not a discount row)
+        boolean hasItemSelected = currentSalePanel.hasItemSelected();
 
-        // Enable Delete and Change Qty buttons only if a row is selected
-        actionsPanel.setDeleteSelectedEnabled(hasRowSelection);
-        actionsPanel.setChangeQtyEnabled(hasRowSelection);
+        actionsPanel.setDeleteSelectedEnabled(hasItemSelected);
+        actionsPanel.setChangeQtyEnabled(hasItemSelected);
     }
 
     private void handleDeleteSelected() {
@@ -1023,6 +1047,23 @@ public class PosInterface extends JFrame {
         globalScanner.disableForDialog();
 
         SocketConfigDialog dialog = new SocketConfigDialog(this, socketService);
+
+        // Re-enable scanner when dialog closes
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                globalScanner.enable();
+            }
+        });
+
+        dialog.setVisible(true);
+    }
+
+    private void showApiConfigDialog() {
+        // Disable barcode scanner while API config dialog is open
+        globalScanner.disableForDialog();
+
+        ApiConfigDialog dialog = new ApiConfigDialog(this, configManager, discountApiClient);
 
         // Re-enable scanner when dialog closes
         dialog.addWindowListener(new java.awt.event.WindowAdapter() {

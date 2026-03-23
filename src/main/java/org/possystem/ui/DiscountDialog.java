@@ -271,20 +271,6 @@ public class DiscountDialog extends JDialog {
         headerLabel.setForeground(Color.WHITE);
         headerPanel.add(headerLabel, BorderLayout.CENTER);
 
-        // Add close button
-        JButton closeButton = new JButton("✕");
-        closeButton.setFont(new Font("Arial", Font.BOLD, 20));
-        closeButton.setForeground(Color.WHITE);
-        closeButton.setBackground(new Color(23, 162, 184));
-        closeButton.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        closeButton.setFocusPainted(false);
-        closeButton.setOpaque(true);
-        closeButton.setBorderPainted(false);
-        closeButton.setContentAreaFilled(false); // Transparent background
-        closeButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        closeButton.addActionListener(e -> dispose());
-        headerPanel.add(closeButton, BorderLayout.EAST);
-
         // Add mouse drag functionality to header
         final java.awt.Point[] mouseDownCompCoords = {null};
         headerPanel.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -326,11 +312,11 @@ public class DiscountDialog extends JDialog {
         buttonGridPanel.setMaximumSize(new Dimension(gridWidth, gridHeight));
         buttonGridPanel.setMinimumSize(new Dimension(gridWidth, gridHeight));
 
-        // Create Cancel button (gray)
-        JButton cancelButton = createButton("<html><center>Cancel</center></html>", new Color(108, 117, 125));
+        // Create Close button (gray)
+        JButton cancelButton = createButton("<html><center>Close</center></html>", new Color(108, 117, 125));
         cancelButton.addActionListener(e -> dispose());
 
-        // Add buttons to grid: Row 1: Senior | Veteran, Row 2: Apply Coupon | Cancel
+        // Add buttons to grid: Row 1: Senior | Veteran, Row 2: Apply Coupon | Close
         buttonGridPanel.add(seniorButton);
         buttonGridPanel.add(veteranButton);
         buttonGridPanel.add(couponButton);
