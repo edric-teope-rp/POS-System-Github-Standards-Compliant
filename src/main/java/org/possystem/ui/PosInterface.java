@@ -8,6 +8,7 @@ import org.possystem.socket.SocketService;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.AWTEventListener;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -28,6 +29,11 @@ public class PosInterface extends JFrame {
     private QuickKeysPanel quickKeysPanel;
     private CurrentSalePanel currentSalePanel;
     private ActionsPanel actionsPanel;
+
+    // Idle detection
+    private Timer idleTimer;
+    private static final int IDLE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+    private LockScreenCarousel carousel;
 
     public PosInterface() {
         this.configManager = new ConfigManager();
@@ -70,14 +76,27 @@ public class PosInterface extends JFrame {
 
         // Start global barcode scanner
         globalScanner.start();
+
+        // Setup idle detection
+        setupIdleDetection();
     }
 
     private void setupFrame() {
         setTitle("POS System - Point of Sale");
-        setSize(1600, 900);
+
+        // Remove window decorations for borderless full screen
+        setUndecorated(true);
+
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setLocationRelativeTo(null);
-        setExtendedState(JFrame.MAXIMIZED_BOTH);
+
+        // Borderless full-screen window mode (allows dialogs to work)
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        setSize(screenSize);
+        setLocation(0, 0);
+        setResizable(false);
+        setAlwaysOnTop(true);
+
+        System.out.println("POS: Configured as borderless full-screen window");
 
         // Add window listener to handle clean shutdown
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -310,6 +329,11 @@ public class PosInterface extends JFrame {
 
                 addActionListener(e -> {
                     if (showCloseConfirmDialog()) {
+                        // Stop global scanner
+                        globalScanner.stop();
+                        // Shutdown socket service gracefully
+                        socketService.shutdown();
+                        dispose();
                         System.exit(0);
                     }
                 });
@@ -1581,6 +1605,76 @@ public class PosInterface extends JFrame {
 
     private void showError(String message) {
         showErrorDialog("Error", "System Error", message);
+    }
+
+    /**
+     * Setup idle detection to show carousel after 2 minutes of inactivity
+     */
+    private void setupIdleDetection() {
+        // Create idle timer (2 minutes)
+        idleTimer = new Timer(IDLE_TIMEOUT_MS, e -> showCarousel());
+        idleTimer.setRepeats(false); // Only fire once
+        idleTimer.start();
+
+        // Add global mouse listener to detect activity
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            resetIdleTimer();
+        }, AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
+
+        // Add global keyboard listener to detect activity
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            resetIdleTimer();
+        }, AWTEvent.KEY_EVENT_MASK);
+    }
+
+    /**
+     * Reset the idle timer when user activity is detected
+     */
+    private void resetIdleTimer() {
+        if (idleTimer != null && idleTimer.isRunning()) {
+            idleTimer.restart();
+        } else if (idleTimer != null && carousel == null) {
+            // Only restart if carousel is not currently showing
+            idleTimer.restart();
+        }
+    }
+
+    /**
+     * Show the carousel overlay when idle timeout is reached
+     */
+    private void showCarousel() {
+        if (carousel != null) {
+            return; // Already showing
+        }
+
+        System.out.println("Idle timeout reached - showing carousel");
+
+        // Hide POS interface
+        setVisible(false);
+
+        // Create and show carousel
+        carousel = new LockScreenCarousel(() -> {
+            // When user clicks to unlock
+            System.out.println("Carousel unlocked - returning to POS");
+
+            // Dispose carousel
+            if (carousel != null) {
+                carousel.dispose();
+                carousel = null;
+            }
+
+            // Show POS interface again
+            setVisible(true);
+            toFront();
+            requestFocus();
+
+            // Restart idle timer
+            if (idleTimer != null) {
+                idleTimer.restart();
+            }
+        });
+
+        carousel.setVisible(true);
     }
 
     public static void main(String[] args) {
