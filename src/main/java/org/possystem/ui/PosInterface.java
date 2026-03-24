@@ -8,6 +8,7 @@ import org.possystem.socket.SocketService;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.AWTEventListener;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -28,6 +29,11 @@ public class PosInterface extends JFrame {
     private QuickKeysPanel quickKeysPanel;
     private CurrentSalePanel currentSalePanel;
     private ActionsPanel actionsPanel;
+
+    // Idle detection
+    private Timer idleTimer;
+    private static final int IDLE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+    private LockScreenCarousel carousel;
 
     public PosInterface() {
         this.configManager = new ConfigManager();
@@ -70,14 +76,27 @@ public class PosInterface extends JFrame {
 
         // Start global barcode scanner
         globalScanner.start();
+
+        // Setup idle detection
+        setupIdleDetection();
     }
 
     private void setupFrame() {
         setTitle("POS System - Point of Sale");
-        setSize(1600, 900);
+
+        // Remove window decorations for borderless full screen
+        setUndecorated(true);
+
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setLocationRelativeTo(null);
-        setExtendedState(JFrame.MAXIMIZED_BOTH);
+
+        // Borderless full-screen window mode (allows dialogs to work)
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        setSize(screenSize);
+        setLocation(0, 0);
+        setResizable(false);
+        setAlwaysOnTop(true);
+
+        System.out.println("POS: Configured as borderless full-screen window");
 
         // Add window listener to handle clean shutdown
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -310,6 +329,11 @@ public class PosInterface extends JFrame {
 
                 addActionListener(e -> {
                     if (showCloseConfirmDialog()) {
+                        // Stop global scanner
+                        globalScanner.stop();
+                        // Shutdown socket service gracefully
+                        socketService.shutdown();
+                        dispose();
                         System.exit(0);
                     }
                 });
@@ -434,13 +458,13 @@ public class PosInterface extends JFrame {
         int buttonHeight = Math.round(55 * scaleFactor);
 
         int dialogWidth = (int) (screenSize.width * 0.25);
-        int dialogHeight = (int) (screenSize.height * 0.50);
+        int dialogHeight = (int) (screenSize.height * 0.35);
 
         JDialog settingsDialog = new JDialog(this, "Settings", Dialog.ModalityType.APPLICATION_MODAL);
         settingsDialog.setUndecorated(true);
         settingsDialog.setResizable(false);
         settingsDialog.setSize(dialogWidth, dialogHeight);
-        settingsDialog.setMinimumSize(new Dimension(350, 420));
+        settingsDialog.setMinimumSize(new Dimension(350, 320));
         settingsDialog.setLocationRelativeTo(this);
         settingsDialog.setLayout(new BorderLayout());
 
@@ -531,63 +555,34 @@ public class PosInterface extends JFrame {
         centerPanel.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
         centerPanel.setBackground(Color.WHITE);
 
-        // Light Mode Button
-        JButton lightModeButton = new JButton("Light Mode");
-        lightModeButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        lightModeButton.setPreferredSize(new Dimension(0, buttonHeight));
-        lightModeButton.setBackground(new Color(240, 240, 240));
-        lightModeButton.setForeground(Color.BLACK);
-        lightModeButton.setFocusPainted(false);
-        lightModeButton.setBorderPainted(true);
-        lightModeButton.setOpaque(true);
-        lightModeButton.addActionListener(e -> {
-            // TODO: Implement Light Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Light Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(lightModeButton);
-
-        // Dark Mode Button
-        JButton darkModeButton = new JButton("Dark Mode");
-        darkModeButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        darkModeButton.setPreferredSize(new Dimension(0, buttonHeight));
-        darkModeButton.setBackground(new Color(45, 45, 48));
-        darkModeButton.setForeground(Color.WHITE);
-        darkModeButton.setFocusPainted(false);
-        darkModeButton.setBorderPainted(true);
-        darkModeButton.setOpaque(true);
-        darkModeButton.addActionListener(e -> {
-            // TODO: Implement Dark Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Dark Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(darkModeButton);
-
-        // Auto Button
-        JButton autoButton = new JButton("Auto");
-        autoButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        autoButton.setPreferredSize(new Dimension(0, buttonHeight));
-        autoButton.setBackground(new Color(128, 128, 128)); // Grey
-        autoButton.setForeground(Color.WHITE);
-        autoButton.setFocusPainted(false);
-        autoButton.setBorderPainted(true);
-        autoButton.setOpaque(true);
-        autoButton.addActionListener(e -> {
-            // TODO: Implement Auto Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Auto Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(autoButton);
-
-        // Low Attention Span Mode Button
-        JButton lowAttentionButton = new JButton("Low Attention Span Mode");
+        // Low Attention Span Mode Button (Toggle)
+        final boolean[] lowAttentionModeEnabled = {false}; // Track state
+        JButton lowAttentionButton = new JButton("Low Attention Span Mode: OFF");
         lowAttentionButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
         lowAttentionButton.setPreferredSize(new Dimension(0, buttonHeight));
-        lowAttentionButton.setBackground(new Color(255, 140, 0));  // Dark orange
+        lowAttentionButton.setBackground(new Color(128, 128, 128));  // Gray when OFF
         lowAttentionButton.setForeground(Color.WHITE);
         lowAttentionButton.setFocusPainted(false);
         lowAttentionButton.setBorderPainted(true);
         lowAttentionButton.setOpaque(true);
         lowAttentionButton.addActionListener(e -> {
-            // TODO: Implement Low Attention Span Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Low Attention Span Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
+            // Toggle the state
+            lowAttentionModeEnabled[0] = !lowAttentionModeEnabled[0];
+
+            // Update button appearance
+            if (lowAttentionModeEnabled[0]) {
+                lowAttentionButton.setText("Low Attention Span Mode: ON");
+                lowAttentionButton.setBackground(new Color(255, 140, 0));  // Dark orange when ON
+            } else {
+                lowAttentionButton.setText("Low Attention Span Mode: OFF");
+                lowAttentionButton.setBackground(new Color(128, 128, 128));  // Gray when OFF
+            }
+
+            // Apply the mode to CurrentSalePanel
+            currentSalePanel.setLowAttentionSpanMode(lowAttentionModeEnabled[0]);
+
+            // Repaint button to show color change
+            lowAttentionButton.repaint();
         });
         applyRoundedStyle(lowAttentionButton);
 
@@ -623,25 +618,11 @@ public class PosInterface extends JFrame {
         });
         applyRoundedStyle(apiConfigButton);
 
-        // Theme buttons
-        lightModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        lightModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(lightModeButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        darkModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        darkModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(darkModeButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        autoButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        autoButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(autoButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
+        // Low Attention Span Mode
         lowAttentionButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         lowAttentionButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
         centerPanel.add(lowAttentionButton);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
 
         // Separator between theme buttons and configuration buttons
         centerPanel.add(Box.createRigidArea(new Dimension(0, 20)));
@@ -1624,6 +1605,76 @@ public class PosInterface extends JFrame {
 
     private void showError(String message) {
         showErrorDialog("Error", "System Error", message);
+    }
+
+    /**
+     * Setup idle detection to show carousel after 2 minutes of inactivity
+     */
+    private void setupIdleDetection() {
+        // Create idle timer (2 minutes)
+        idleTimer = new Timer(IDLE_TIMEOUT_MS, e -> showCarousel());
+        idleTimer.setRepeats(false); // Only fire once
+        idleTimer.start();
+
+        // Add global mouse listener to detect activity
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            resetIdleTimer();
+        }, AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
+
+        // Add global keyboard listener to detect activity
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            resetIdleTimer();
+        }, AWTEvent.KEY_EVENT_MASK);
+    }
+
+    /**
+     * Reset the idle timer when user activity is detected
+     */
+    private void resetIdleTimer() {
+        if (idleTimer != null && idleTimer.isRunning()) {
+            idleTimer.restart();
+        } else if (idleTimer != null && carousel == null) {
+            // Only restart if carousel is not currently showing
+            idleTimer.restart();
+        }
+    }
+
+    /**
+     * Show the carousel overlay when idle timeout is reached
+     */
+    private void showCarousel() {
+        if (carousel != null) {
+            return; // Already showing
+        }
+
+        System.out.println("Idle timeout reached - showing carousel");
+
+        // Hide POS interface
+        setVisible(false);
+
+        // Create and show carousel
+        carousel = new LockScreenCarousel(() -> {
+            // When user clicks to unlock
+            System.out.println("Carousel unlocked - returning to POS");
+
+            // Dispose carousel
+            if (carousel != null) {
+                carousel.dispose();
+                carousel = null;
+            }
+
+            // Show POS interface again
+            setVisible(true);
+            toFront();
+            requestFocus();
+
+            // Restart idle timer
+            if (idleTimer != null) {
+                idleTimer.restart();
+            }
+        });
+
+        carousel.setVisible(true);
     }
 
     public static void main(String[] args) {

@@ -27,9 +27,21 @@ public class CurrentSalePanel extends JPanel {
     private JTable saleTable;
     private SaleTableModel saleTableModel;
     private JLabel subtotalLabel;
+    private JLabel happyCatLabel; // Animated GIF for Low Attention Span Mode
     private JPanel discountsPanel; // Container for discount labels
     private JLabel taxLabel;
     private JLabel totalLabel;
+
+    // Low Attention Span Mode - GIF cycling
+    private Timer gifCycleTimer;
+    private String[] catGifPaths = {
+        "/images/happy-cat.gif",
+        "/images/pop-cat.gif",
+        "/images/sad-cat.gif",
+        "/images/suprised-cat.gif"
+    };
+    private int currentGifIndex = 0;
+    private int lastPanelHeight = 0; // Track panel height for resizing
 
     public static final int MIN_WIDTH = 400;
 
@@ -97,6 +109,13 @@ public class CurrentSalePanel extends JPanel {
         subtotalLabel = new JLabel("Subtotal: $0.00");
         subtotalLabel.setFont(new Font("Arial", Font.PLAIN, 18));
 
+        // Happy Cat GIF for Low Attention Span Mode
+        // Note: Will be scaled dynamically in layoutComponents() to match totals panel height
+        happyCatLabel = new JLabel();
+        happyCatLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        happyCatLabel.setVerticalAlignment(SwingConstants.CENTER);
+        happyCatLabel.setVisible(false); // Initially hidden until Low Attention Span Mode is enabled
+
         // Discounts panel - will hold dynamic discount labels
         discountsPanel = new JPanel();
         discountsPanel.setLayout(new BoxLayout(discountsPanel, BoxLayout.Y_AXIS));
@@ -115,23 +134,39 @@ public class CurrentSalePanel extends JPanel {
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         add(scrollPane, BorderLayout.CENTER);
 
-        // Totals panel at bottom - using BoxLayout for dynamic rows
-        JPanel totalsPanel = new JPanel();
-        totalsPanel.setLayout(new BoxLayout(totalsPanel, BoxLayout.Y_AXIS));
+        // Totals panel at bottom - BorderLayout to accommodate full-height GIF on right
+        JPanel totalsPanel = new JPanel(new BorderLayout(10, 0));
         totalsPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Add components in order: Subtotal, Discounts (dynamic), Tax, Total
+        // Left side: All text labels (Subtotal, Discounts, Tax, Total)
+        JPanel textLabelsPanel = new JPanel();
+        textLabelsPanel.setLayout(new BoxLayout(textLabelsPanel, BoxLayout.Y_AXIS));
+        textLabelsPanel.setOpaque(false);
+
         subtotalLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        totalsPanel.add(subtotalLabel);
+        textLabelsPanel.add(subtotalLabel);
 
         discountsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        totalsPanel.add(discountsPanel);
+        textLabelsPanel.add(discountsPanel);
 
         taxLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        totalsPanel.add(taxLabel);
+        textLabelsPanel.add(taxLabel);
 
         totalLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        totalsPanel.add(totalLabel);
+        textLabelsPanel.add(totalLabel);
+
+        totalsPanel.add(textLabelsPanel, BorderLayout.CENTER);
+
+        // Right side: Happy Cat GIF (full height)
+        totalsPanel.add(happyCatLabel, BorderLayout.EAST);
+
+        // Add component listener to dynamically resize GIF based on totals panel height
+        totalsPanel.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                updateHappyCatSize(totalsPanel.getHeight());
+            }
+        });
 
         add(totalsPanel, BorderLayout.SOUTH);
     }
@@ -259,6 +294,77 @@ public class CurrentSalePanel extends JPanel {
 
         // Repaint to show visual changes
         saleTable.repaint();
+    }
+
+    /**
+     * Toggle Low Attention Span Mode (shows/hides Happy Cat GIF and starts/stops cycling)
+     */
+    public void setLowAttentionSpanMode(boolean enabled) {
+        if (happyCatLabel != null) {
+            happyCatLabel.setVisible(enabled);
+        }
+
+        if (enabled) {
+            // Start with first GIF
+            currentGifIndex = 0;
+            updateCurrentGif();
+
+            // Start timer to cycle through GIFs every 15 seconds
+            if (gifCycleTimer != null) {
+                gifCycleTimer.stop();
+            }
+            gifCycleTimer = new Timer(15000, e -> {
+                currentGifIndex = (currentGifIndex + 1) % catGifPaths.length;
+                updateCurrentGif();
+            });
+            gifCycleTimer.start();
+        } else {
+            // Stop timer when mode is disabled
+            if (gifCycleTimer != null) {
+                gifCycleTimer.stop();
+                gifCycleTimer = null;
+            }
+        }
+    }
+
+    /**
+     * Update the currently displayed GIF (called when cycling through GIFs)
+     */
+    private void updateCurrentGif() {
+        if (lastPanelHeight > 0) {
+            updateHappyCatSize(lastPanelHeight);
+        }
+    }
+
+    /**
+     * Dynamically resize Cat GIF to match totals panel height
+     */
+    private void updateHappyCatSize(int panelHeight) {
+        if (panelHeight <= 0) return;
+
+        lastPanelHeight = panelHeight; // Store for later use when cycling
+
+        try {
+            // Load current GIF from resources
+            String gifPath = catGifPaths[currentGifIndex];
+            java.net.URL gifUrl = getClass().getResource(gifPath);
+            if (gifUrl != null) {
+                ImageIcon originalIcon = new ImageIcon(gifUrl);
+
+                // Scale GIF to match panel height minus padding (subtract 20px for top/bottom padding)
+                int gifHeight = Math.max(60, panelHeight - 20); // Minimum 60px
+                int gifWidth = gifHeight; // Keep it square
+
+                // Scale the GIF proportionally
+                Image scaledImage = originalIcon.getImage().getScaledInstance(gifWidth, gifHeight, Image.SCALE_DEFAULT);
+                ImageIcon scaledIcon = new ImageIcon(scaledImage);
+
+                happyCatLabel.setIcon(scaledIcon);
+                happyCatLabel.setPreferredSize(new Dimension(gifWidth, gifHeight));
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load cat GIF: " + e.getMessage());
+        }
     }
 
     private void showError(String message) {

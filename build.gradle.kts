@@ -21,6 +21,8 @@ tasks.withType<JavaCompile> {
 
 tasks.withType<JavaExec> {
     jvmArgs("--enable-preview")
+    // Export macOS-specific APIs for native full screen support
+    jvmArgs("--add-exports", "java.desktop/com.apple.eawt=ALL-UNNAMED")
 }
 
 repositories {
