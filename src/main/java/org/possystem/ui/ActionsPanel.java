@@ -2,8 +2,10 @@ package org.possystem.ui;
 
 import org.possystem.entity.PriceBook;
 import org.possystem.entity.TransactionItem;
+import org.possystem.entity.TransactionDiscount;
 import org.possystem.service.PriceBookService;
 import org.possystem.service.TransactionService;
+import org.possystem.service.DiscountApiClient;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -11,7 +13,9 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Actions Panel - Transaction actions and payment buttons
@@ -20,6 +24,7 @@ public class ActionsPanel extends JPanel {
 
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
+    private final DiscountApiClient discountApiClient;
     private final Runnable onSaleRefresh;
     private Runnable onTransactionFinalized;
     private Runnable onTransactionResumed;
@@ -45,11 +50,16 @@ public class ActionsPanel extends JPanel {
     private JButton deleteSelectedButton;
     private JButton totalButton;
     private JButton paymentVoidButton;
+    private JButton discountButton;
+    private GlobalBarcodeScanner globalScanner;
 
     public ActionsPanel(PriceBookService priceBookService, TransactionService transactionService,
+                       DiscountApiClient discountApiClient, GlobalBarcodeScanner globalScanner,
                        Runnable onSaleRefresh) {
         this.priceBookService = priceBookService;
         this.transactionService = transactionService;
+        this.discountApiClient = discountApiClient;
+        this.globalScanner = globalScanner;
         this.onSaleRefresh = onSaleRefresh;
 
         setLayout(new BorderLayout(5, 5));
@@ -59,8 +69,8 @@ public class ActionsPanel extends JPanel {
         layoutComponents();
         attachEventHandlers();
 
-        // Initialize focus for barcode scanner (needs to be done after layout)
-        SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+        // NOTE: ActionsPanel barcode scanner DISABLED - GlobalBarcodeScanner handles all scanning
+        // SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
     }
 
     private void initializeComponents() {
@@ -149,6 +159,13 @@ public class ActionsPanel extends JPanel {
         totalButton.setForeground(Color.WHITE);
         totalButton.setFont(new Font("Arial", Font.BOLD, 16));
 
+        discountButton = new JButton("Discount");
+        discountButton.setBackground(new Color(147, 51, 234)); // Purple/violet
+        discountButton.setOpaque(true);
+        discountButton.setBorderPainted(false);
+        discountButton.setForeground(Color.WHITE);
+        discountButton.setFont(new Font("Arial", Font.BOLD, 14));
+
         // Apply text outlines
         applyTextOutline(changeQtyButton);
         applyTextOutline(voidTransactionButton);
@@ -156,6 +173,16 @@ public class ActionsPanel extends JPanel {
         applyTextOutline(payCardButton);
         applyTextOutline(deleteSelectedButton);
         applyTextOutline(totalButton);
+        applyTextOutline(discountButton);
+
+        // Prevent buttons from receiving keyboard focus (POS is scan/touch operated)
+        changeQtyButton.setFocusable(false);
+        voidTransactionButton.setFocusable(false);
+        payCashButton.setFocusable(false);
+        payCardButton.setFocusable(false);
+        deleteSelectedButton.setFocusable(false);
+        totalButton.setFocusable(false);
+        discountButton.setFocusable(false);
 
         // Initially disable payment buttons
         payCashButton.setEnabled(false);
@@ -194,13 +221,14 @@ public class ActionsPanel extends JPanel {
         transactionSubZone.add(indicatorContainer, BorderLayout.NORTH);
 
         // Transaction buttons in horizontal layout
-        JPanel transactionButtonsPanel = new JPanel(new GridLayout(1, 4, 10, 10));
+        JPanel transactionButtonsPanel = new JPanel(new GridLayout(1, 5, 10, 10));
         transactionButtonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        // Add all 4 transaction buttons (Void Item -> Void Basket -> Change Qty -> Total)
+        // Add all 5 transaction buttons (Void Item -> Void Basket -> Change Qty -> Discount -> Total)
         transactionButtonsPanel.add(deleteSelectedButton);
         transactionButtonsPanel.add(voidTransactionButton);
         transactionButtonsPanel.add(changeQtyButton);
+        transactionButtonsPanel.add(discountButton);
         transactionButtonsPanel.add(totalButton);
 
         transactionSubZone.add(transactionButtonsPanel, BorderLayout.CENTER);
@@ -233,6 +261,7 @@ public class ActionsPanel extends JPanel {
         paymentVoidButton.setForeground(Color.WHITE);
         paymentVoidButton.setFont(new Font("Arial", Font.BOLD, 16));
         applyTextOutline(paymentVoidButton);
+        paymentVoidButton.setFocusable(false);
         paymentVoidButton.setEnabled(false);
 
         paymentButtonsGrid.add(paymentVoidButton);
@@ -263,7 +292,9 @@ public class ActionsPanel extends JPanel {
     }
 
     private void attachEventHandlers() {
-        // Barcode Scanner Field - Auto-detect when scanning completes
+        // NOTE: ActionsPanel barcode scanner DISABLED - GlobalBarcodeScanner handles all scanning
+        // The barcodeScannerField is kept in the UI but no longer processes scans
+        /*
         barcodeScannerField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -285,6 +316,7 @@ public class ActionsPanel extends JPanel {
                 scanCompleteTimer.restart();
             }
         });
+        */
 
         // Action buttons - deleteSelectedButton and changeQtyButton are wired via callbacks
         voidTransactionButton.addActionListener(e -> handleVoidTransaction());
@@ -292,13 +324,26 @@ public class ActionsPanel extends JPanel {
         payCashButton.addActionListener(e -> handlePayCash());
         payCardButton.addActionListener(e -> handlePayCard());
         paymentVoidButton.addActionListener(e -> handleCancelTotal());
+        discountButton.addActionListener(e -> handleDiscount());
     }
 
     /**
-     * Process barcode scan when scan detection completes
-     * Implements duplicate prevention and auto-add functionality
+     * DEPRECATED: Process barcode scan when scan detection completes
+     * NOTE: This method is NO LONGER USED - GlobalBarcodeScanner handles all scanning
+     * Kept for reference but disabled to prevent conflicts
      */
+    @Deprecated
     private void processScan() {
+        // DISABLED: GlobalBarcodeScanner handles all product and coupon scanning
+        // This local scanner is no longer active to prevent:
+        // - Redundant database queries
+        // - Conflicting error dialogs for coupons
+        // - Duplicate processing
+
+        // If you need to re-enable local scanning, uncomment the code below
+        // and disable GlobalBarcodeScanner in PosInterface.java
+
+        /*
         String scannedUPC = barcodeScannerField.getText().trim();
 
         // Ignore empty scans
@@ -351,6 +396,7 @@ public class ActionsPanel extends JPanel {
             barcodeScannerField.setText("");
             barcodeScannerField.requestFocusInWindow();
         }
+        */
     }
 
     /**
@@ -438,6 +484,12 @@ public class ActionsPanel extends JPanel {
                 return;
             }
 
+            // Check if any coupons are not triggered (informational only, non-blocking)
+            String couponWarning = transactionService.checkUntriggeredCoupons();
+            if (couponWarning != null) {
+                showWarningDialog("Coupon Not Applied", "Minimum Purchase Not Met", couponWarning);
+            }
+
             // Finalize the basket - disable transaction controls and enable payment buttons
             setTransactionControlsEnabled(false);
             setPaymentButtonsEnabled(true);
@@ -468,12 +520,13 @@ public class ActionsPanel extends JPanel {
 
             if (confirmed) {
                 List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                double subtotal = transactionService.getTransactionSubtotal();
+                List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
                 transactionService.processCash(total);
 
-                showReceiptDialog(items, subtotal, tax, total, total, 0, "CASH - EXACT");
+                showReceiptDialog(items, discounts, subtotal, tax, total, total, 0, "CASH - EXACT");
             } else {
                 // User clicked "No" - return to Cash Payment Options
                 showCashPaymentOptionsDialog(total);
@@ -503,12 +556,13 @@ public class ActionsPanel extends JPanel {
 
             if (confirmed) {
                 List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                double subtotal = transactionService.getTransactionSubtotal();
+                List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
                 transactionService.processCash(nextDollar);
 
-                showReceiptDialog(items, subtotal, tax, total, nextDollar, change, "CASH - NEXT DOLLAR");
+                showReceiptDialog(items, discounts, subtotal, tax, total, nextDollar, change, "CASH - NEXT DOLLAR");
             } else {
                 // User clicked "No" - return to Cash Payment Options
                 showCashPaymentOptionsDialog(total);
@@ -526,6 +580,17 @@ public class ActionsPanel extends JPanel {
                 return;
             }
 
+            // Remove untriggered coupons before payment (silently)
+            transactionService.removeUntriggeredCoupons();
+
+            // Refresh UI to show updated discount amounts
+            if (onSaleRefresh != null) {
+                onSaleRefresh.run();
+            }
+
+            // Recalculate total AFTER removing untriggered coupons
+            total = transactionService.getTransactionTotal();
+
             boolean confirmed = showConfirmDialog(
                 "Card Payment",
                 String.format("Process card payment of $%.2f?", total),
@@ -534,12 +599,13 @@ public class ActionsPanel extends JPanel {
 
             if (confirmed) {
                 List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                double subtotal = transactionService.getTransactionSubtotal();
+                List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
                 transactionService.processCard("", "", "");
 
-                showReceiptDialog(items, subtotal, tax, total, total, 0, "CARD");
+                showReceiptDialog(items, discounts, subtotal, tax, total, total, 0, "CARD");
             }
         } catch (SQLException e) {
             showError("Payment failed: " + e.getMessage());
@@ -596,13 +662,14 @@ public class ActionsPanel extends JPanel {
                     validInput = true;
 
                     List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                    double subtotal = transactionService.getTransactionSubtotal();
+                    List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                    double subtotal = transactionService.getSubtotal(); // Include discounts
                     double tax = total - subtotal;
                     double change = tendered - total;
 
                     transactionService.processCash(tendered);
 
-                    showReceiptDialog(items, subtotal, tax, total, tendered, change, "CASH");
+                    showReceiptDialog(items, discounts, subtotal, tax, total, tendered, change, "CASH");
 
                 } catch (NumberFormatException e) {
                     showErrorDialog(
@@ -628,7 +695,7 @@ public class ActionsPanel extends JPanel {
         int dialogWidth = Math.min(450, screenSize.width - 100);
         int dialogHeight = Math.min(600, screenSize.height - 100);
         inputDialog.setSize(dialogWidth, dialogHeight);
-        inputDialog.setLocationRelativeTo(null); // Center on screen
+        inputDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this)); // Center on parent window
         inputDialog.setLayout(new BorderLayout(10, 10));
 
         // Main panel
@@ -885,6 +952,17 @@ public class ActionsPanel extends JPanel {
                 return;
             }
 
+            // Remove untriggered coupons before payment (silently)
+            transactionService.removeUntriggeredCoupons();
+
+            // Refresh UI to show updated discount amounts
+            if (onSaleRefresh != null) {
+                onSaleRefresh.run();
+            }
+
+            // Recalculate total AFTER removing untriggered coupons
+            total = transactionService.getTransactionTotal();
+
             // Show cash payment options dialog
             showCashPaymentOptionsDialog(total);
         } catch (SQLException e) {
@@ -903,7 +981,7 @@ public class ActionsPanel extends JPanel {
         int dialogWidth = Math.min(400, screenSize.width - 100);
         int dialogHeight = Math.min(350, screenSize.height - 100);
         cashDialog.setSize(dialogWidth, dialogHeight);
-        cashDialog.setLocationRelativeTo(null); // Center on screen
+        cashDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this)); // Center on parent window
 
         // Main panel
         JPanel mainPanel = new JPanel(new BorderLayout(15, 15));
@@ -1039,8 +1117,8 @@ public class ActionsPanel extends JPanel {
         cashDialog.setVisible(true);
     }
 
-    private void showReceiptDialog(List<TransactionItem> items, double subtotal,
-                                   double tax, double total, double tendered,
+    private void showReceiptDialog(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                   double subtotal, double tax, double total, double tendered,
                                    double change, String paymentType) {
         JDialog receiptDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Receipt", Dialog.ModalityType.APPLICATION_MODAL);
 
@@ -1081,7 +1159,7 @@ public class ActionsPanel extends JPanel {
         receiptDialog.setUndecorated(true);
         receiptDialog.setResizable(false);
         receiptDialog.setSize(dialogWidth, dialogHeight);
-        receiptDialog.setLocationRelativeTo(null); // Center on screen
+        receiptDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this)); // Center on parent window
 
         // Main panel with minimal spacing
         JPanel mainPanel = new JPanel(new BorderLayout(0, 0));
@@ -1123,7 +1201,7 @@ public class ActionsPanel extends JPanel {
         contentPanel.setBackground(Color.WHITE);
         contentPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        JTextArea receiptArea = new JTextArea(buildReceiptText(items, subtotal, tax,
+        JTextArea receiptArea = new JTextArea(buildReceiptText(items, discounts, subtotal, tax,
             total, tendered, change, paymentType));
         receiptArea.setEditable(false);
         receiptArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
@@ -1170,21 +1248,88 @@ public class ActionsPanel extends JPanel {
         receiptDialog.setVisible(true);
     }
 
-    private String buildReceiptText(List<TransactionItem> items, double subtotal,
-                                    double tax, double total, double tendered,
+    private String buildReceiptText(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                    double subtotal, double tax, double total, double tendered,
                                     double change, String paymentType) {
         StringBuilder receipt = new StringBuilder();
         receipt.append("=================== RECEIPT ===================\n\n");
+
+        // Build a map of item_id to promotional discount
+        Map<Integer, TransactionDiscount> itemDiscountMap = new HashMap<>();
+        if (discounts != null) {
+            for (TransactionDiscount discount : discounts) {
+                if (discount.discountType().equals("PROMOTIONAL") && discount.itemId() != null) {
+                    itemDiscountMap.put(discount.itemId(), discount);
+                }
+            }
+        }
+
+        // Display items with inline promotional discounts
+        double itemsTotal = 0.0;
         for (TransactionItem item : items) {
             if (item.status().equals("ACTIVE")) {
                 receipt.append(String.format("%-34s x%-2d\n",
                     item.name().substring(0, Math.min(34, item.name().length())),
                     item.quantity()));
-                receipt.append(String.format("  $%-8.2f ea.                  $%-8.2f\n\n",
+                receipt.append(String.format("  $%-8.2f ea.                  $%-8.2f\n",
                     item.unitPrice(), item.subtotal()));
+
+                // Check if item has a promotional discount
+                TransactionDiscount promoDiscount = itemDiscountMap.get(item.id());
+                if (promoDiscount != null) {
+                    // Calculate percentage for display
+                    double percentage = (Math.abs(promoDiscount.discountAmount()) / item.subtotal()) * 100;
+                    String discountDesc = String.format("  Buy %d+ Save %.0f%%", item.quantity(), percentage);
+                    receipt.append(String.format("%-36s -$%-8.2f\n", discountDesc, Math.abs(promoDiscount.discountAmount())));
+                }
+
+                receipt.append("\n");
+                itemsTotal += item.subtotal();
             }
         }
+
         receipt.append("===============================================\n");
+
+        // Show items subtotal
+        receipt.append(String.format("Items Subtotal:                     $%-8.2f\n", itemsTotal));
+
+        // Show only cart-level discounts (Senior/Veteran/Coupon) in totals section
+        if (discounts != null && !discounts.isEmpty()) {
+            boolean hasCartLevelDiscounts = false;
+            for (TransactionDiscount discount : discounts) {
+                String discountLabel = "";
+                if (discount.discountType().equals("SENIOR")) {
+                    discountLabel = "Senior Discount (5%):";
+                } else if (discount.discountType().equals("VETERAN")) {
+                    discountLabel = "Veteran Discount (10%):";
+                } else if (discount.discountType().equals("COUPON")) {
+                    // Get the coupon code for this discount
+                    String couponCode = transactionService.getCouponCodeForDiscount(discount.id());
+
+                    // DEBUG: Log coupon code retrieval
+                    System.out.println("=== RECEIPT COUPON CODE DEBUG ===");
+                    System.out.println("Discount ID: " + discount.id());
+                    System.out.println("Retrieved Coupon Code: " + (couponCode != null ? couponCode : "null"));
+                    System.out.println("================================");
+
+                    if (couponCode != null && !couponCode.isEmpty()) {
+                        discountLabel = String.format("Coupon (%s):", couponCode);
+                    } else {
+                        discountLabel = "Coupon Discount:";
+                    }
+                }
+                // Skip PROMOTIONAL - already shown inline with items
+
+                if (!discountLabel.isEmpty()) {
+                    receipt.append(String.format("%-36s -$%-8.2f\n", discountLabel, Math.abs(discount.discountAmount())));
+                    hasCartLevelDiscounts = true;
+                }
+            }
+            if (hasCartLevelDiscounts) {
+                receipt.append("-----------------------------------------------\n");
+            }
+        }
+
         receipt.append(String.format("Subtotal:                           $%-8.2f\n", subtotal));
         receipt.append(String.format("Tax (7%%):                           $%-8.2f\n", tax));
         receipt.append(String.format("TOTAL:                              $%-8.2f\n\n", total));
@@ -1201,7 +1346,8 @@ public class ActionsPanel extends JPanel {
             if (onSaleRefresh != null) {
                 onSaleRefresh.run();
             }
-            barcodeScannerField.setText("");
+            // NOTE: barcodeScannerField no longer used - GlobalBarcodeScanner handles scanning
+            // barcodeScannerField.setText("");
 
             resetButtonStatesForNewTransaction();
 
@@ -1853,17 +1999,20 @@ public class ActionsPanel extends JPanel {
     }
 
     private void setTransactionControlsEnabled(boolean enabled) {
-        barcodeScannerField.setEnabled(enabled);
-        if (enabled) {
-            // Re-focus scanner field when re-enabled
-            SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
-        }
+        // NOTE: barcodeScannerField no longer used - GlobalBarcodeScanner handles scanning
+        // barcodeScannerField.setEnabled(enabled);
+        // if (enabled) {
+        //     // Re-focus scanner field when re-enabled
+        //     SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+        // }
         changeQtyButton.setEnabled(false);
         changeQtyButton.repaint();
         deleteSelectedButton.setEnabled(false);
         deleteSelectedButton.repaint();
         voidTransactionButton.setEnabled(enabled);
         voidTransactionButton.repaint();
+        discountButton.setEnabled(enabled);
+        discountButton.repaint();
         totalButton.setEnabled(enabled);
         totalButton.repaint();
     }
@@ -1899,6 +2048,24 @@ public class ActionsPanel extends JPanel {
     }
 
     public void returnFocusToScanner() {
-        SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+        // NOTE: barcodeScannerField no longer used - GlobalBarcodeScanner handles scanning
+        // SwingUtilities.invokeLater(() -> barcodeScannerField.requestFocusInWindow());
+    }
+
+    /**
+     * Handler for Discount button
+     * Placeholder - does nothing for now
+     */
+    private void handleDiscount() {
+        // Open discount dialog
+        Window parentWindow = SwingUtilities.getWindowAncestor(this);
+        DiscountDialog dialog = new DiscountDialog(
+            parentWindow,
+            transactionService,
+            discountApiClient,
+            globalScanner,  // Pass scanner to disable during coupon entry
+            onSaleRefresh  // Refresh the sale display after discount applied
+        );
+        dialog.setVisible(true);
     }
 }

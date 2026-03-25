@@ -27,7 +27,8 @@ public class PriceBookDao {
                     rs.getString("name"),
                     rs.getDouble("price"),
                     rs.getBoolean("is_featured"),
-                    (Integer) rs.getObject("quick_key_position")
+                    (Integer) rs.getObject("quick_key_position"),
+                    rs.getBoolean("has_promotion")
             ));
         }
         return Optional.empty();
@@ -46,7 +47,8 @@ public class PriceBookDao {
                     rs.getString("name"),
                     rs.getDouble("price"),
                     rs.getBoolean("is_featured"),
-                    (Integer) rs.getObject("quick_key_position")
+                    (Integer) rs.getObject("quick_key_position"),
+                    rs.getBoolean("has_promotion")
             ));
         }
         return items;
@@ -65,7 +67,8 @@ public class PriceBookDao {
                     rs.getString("name"),
                     rs.getDouble("price"),
                     rs.getBoolean("is_featured"),
-                    (Integer) rs.getObject("quick_key_position")
+                    (Integer) rs.getObject("quick_key_position"),
+                    rs.getBoolean("has_promotion")
             ));
         }
         return items;

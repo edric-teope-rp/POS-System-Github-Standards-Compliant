@@ -36,7 +36,8 @@ public class DatabaseManager {
                 name                VARCHAR(100) NOT NULL,
                 price               DOUBLE NOT NULL,
                 is_featured         BOOLEAN DEFAULT FALSE,
-                quick_key_position  INT DEFAULT NULL
+                quick_key_position  INT DEFAULT NULL,
+                has_promotion       BOOLEAN DEFAULT FALSE
             )
         """);
 
@@ -67,6 +68,20 @@ public class DatabaseManager {
                 status          VARCHAR(20) DEFAULT 'ACTIVE',
                 FOREIGN KEY (transaction_id) REFERENCES transaction_header(id),
                 FOREIGN KEY (upc) REFERENCES price_book(upc)
+            )
+        """);
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS transaction_discounts (
+                id              INT AUTO_INCREMENT PRIMARY KEY,
+                transaction_id  INT NOT NULL,
+                discount_type   VARCHAR(50) NOT NULL,
+                discount_amount DOUBLE NOT NULL,
+                item_id         INT DEFAULT NULL,
+                status          VARCHAR(20) DEFAULT 'ACTIVE',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (transaction_id) REFERENCES transaction_header(id),
+                FOREIGN KEY (item_id) REFERENCES transaction_items(id)
             )
         """);
 

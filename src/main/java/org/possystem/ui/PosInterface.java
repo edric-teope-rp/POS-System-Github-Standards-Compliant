@@ -1,11 +1,14 @@
 package org.possystem.ui;
 
+import org.possystem.config.ConfigManager;
 import org.possystem.service.PriceBookService;
 import org.possystem.service.TransactionService;
+import org.possystem.service.DiscountApiClient;
 import org.possystem.socket.SocketService;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.AWTEventListener;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -15,8 +18,10 @@ import java.util.List;
 public class PosInterface extends JFrame {
 
     // Services
+    private final ConfigManager configManager;
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
+    private final DiscountApiClient discountApiClient;
     private final SocketService socketService;
     private final GlobalBarcodeScanner globalScanner;
 
@@ -25,13 +30,32 @@ public class PosInterface extends JFrame {
     private CurrentSalePanel currentSalePanel;
     private ActionsPanel actionsPanel;
 
+    // Idle detection
+    private Timer idleTimer;
+    private static final int IDLE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+    private LockScreenCarousel carousel;
+
+    // Window state for maximize/restore
+    private boolean isMaximized = false;
+    private Rectangle previousBounds = null;
+
     public PosInterface() {
+        this.configManager = new ConfigManager();
         this.priceBookService = new PriceBookService();
         this.transactionService = new TransactionService();
+        this.discountApiClient = new DiscountApiClient(configManager.getDiscountApiUrl());
         this.socketService = new SocketService("config/socket-config.json");
 
         // Wire socket service to transaction service for journal broadcasting
         this.transactionService.setSocketService(socketService);
+
+        // Wire discount API client to transaction service for discount recalculation
+        this.transactionService.setDiscountApiClient(discountApiClient);
+
+        // Wire toast callback for promotional discount notifications
+        this.transactionService.setToastCallback((title, message) -> {
+            ToastNotification.showToast(this, title, message);
+        });
 
         // Initialize global barcode scanner
         this.globalScanner = new GlobalBarcodeScanner(
@@ -56,14 +80,27 @@ public class PosInterface extends JFrame {
 
         // Start global barcode scanner
         globalScanner.start();
+
+        // Setup idle detection
+        setupIdleDetection();
     }
 
     private void setupFrame() {
         setTitle("POS System - Point of Sale");
-        setSize(1600, 900);
+
+        // Remove window decorations for borderless full screen
+        setUndecorated(true);
+
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setLocationRelativeTo(null);
-        setExtendedState(JFrame.MAXIMIZED_BOTH);
+
+        // Borderless full-screen window mode (allows dialogs to work)
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        setSize(screenSize);
+        setLocation(0, 0);
+        setResizable(false);
+        setAlwaysOnTop(true);
+
+        System.out.println("POS: Configured as borderless full-screen window");
 
         // Add window listener to handle clean shutdown
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -94,7 +131,7 @@ public class PosInterface extends JFrame {
 
         currentSalePanel = new CurrentSalePanel(transactionService, this::updateDeleteSelectedButton);
 
-        actionsPanel = new ActionsPanel(priceBookService, transactionService, this::refreshSaleDisplay);
+        actionsPanel = new ActionsPanel(priceBookService, transactionService, discountApiClient, globalScanner, this::refreshSaleDisplay);
 
         // Wire up callbacks
         actionsPanel.setDeleteSelectedCallback(this::handleDeleteSelected);
@@ -238,7 +275,7 @@ public class PosInterface extends JFrame {
         JButton closeButton = createCloseButton();
         headerPanel.add(closeButton, BorderLayout.EAST);
 
-        // Add window dragging functionality
+        // Add window dragging functionality and double-click to maximize
         final Point[] mouseDownCompCoords = {null};
 
         headerPanel.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -250,6 +287,14 @@ public class PosInterface extends JFrame {
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 mouseDownCompCoords[0] = null;
+            }
+
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                // Double-click to maximize/restore
+                if (e.getClickCount() == 2) {
+                    toggleMaximize();
+                }
             }
         });
 
@@ -296,6 +341,11 @@ public class PosInterface extends JFrame {
 
                 addActionListener(e -> {
                     if (showCloseConfirmDialog()) {
+                        // Stop global scanner
+                        globalScanner.stop();
+                        // Shutdown socket service gracefully
+                        socketService.shutdown();
+                        dispose();
                         System.exit(0);
                     }
                 });
@@ -420,13 +470,13 @@ public class PosInterface extends JFrame {
         int buttonHeight = Math.round(55 * scaleFactor);
 
         int dialogWidth = (int) (screenSize.width * 0.25);
-        int dialogHeight = (int) (screenSize.height * 0.50);
+        int dialogHeight = (int) (screenSize.height * 0.35);
 
         JDialog settingsDialog = new JDialog(this, "Settings", Dialog.ModalityType.APPLICATION_MODAL);
         settingsDialog.setUndecorated(true);
         settingsDialog.setResizable(false);
         settingsDialog.setSize(dialogWidth, dialogHeight);
-        settingsDialog.setMinimumSize(new Dimension(350, 420));
+        settingsDialog.setMinimumSize(new Dimension(350, 320));
         settingsDialog.setLocationRelativeTo(this);
         settingsDialog.setLayout(new BorderLayout());
 
@@ -517,63 +567,34 @@ public class PosInterface extends JFrame {
         centerPanel.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
         centerPanel.setBackground(Color.WHITE);
 
-        // Light Mode Button
-        JButton lightModeButton = new JButton("Light Mode");
-        lightModeButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        lightModeButton.setPreferredSize(new Dimension(0, buttonHeight));
-        lightModeButton.setBackground(new Color(240, 240, 240));
-        lightModeButton.setForeground(Color.BLACK);
-        lightModeButton.setFocusPainted(false);
-        lightModeButton.setBorderPainted(true);
-        lightModeButton.setOpaque(true);
-        lightModeButton.addActionListener(e -> {
-            // TODO: Implement Light Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Light Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(lightModeButton);
-
-        // Dark Mode Button
-        JButton darkModeButton = new JButton("Dark Mode");
-        darkModeButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        darkModeButton.setPreferredSize(new Dimension(0, buttonHeight));
-        darkModeButton.setBackground(new Color(45, 45, 48));
-        darkModeButton.setForeground(Color.WHITE);
-        darkModeButton.setFocusPainted(false);
-        darkModeButton.setBorderPainted(true);
-        darkModeButton.setOpaque(true);
-        darkModeButton.addActionListener(e -> {
-            // TODO: Implement Dark Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Dark Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(darkModeButton);
-
-        // Auto Button
-        JButton autoButton = new JButton("Auto");
-        autoButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
-        autoButton.setPreferredSize(new Dimension(0, buttonHeight));
-        autoButton.setBackground(new Color(128, 128, 128)); // Grey
-        autoButton.setForeground(Color.WHITE);
-        autoButton.setFocusPainted(false);
-        autoButton.setBorderPainted(true);
-        autoButton.setOpaque(true);
-        autoButton.addActionListener(e -> {
-            // TODO: Implement Auto Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Auto Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
-        });
-        applyRoundedStyle(autoButton);
-
-        // Low Attention Span Mode Button
-        JButton lowAttentionButton = new JButton("Low Attention Span Mode");
+        // Low Attention Span Mode Button (Toggle)
+        final boolean[] lowAttentionModeEnabled = {false}; // Track state
+        JButton lowAttentionButton = new JButton("Low Attention Span Mode: OFF");
         lowAttentionButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
         lowAttentionButton.setPreferredSize(new Dimension(0, buttonHeight));
-        lowAttentionButton.setBackground(new Color(255, 140, 0));  // Dark orange
+        lowAttentionButton.setBackground(new Color(128, 128, 128));  // Gray when OFF
         lowAttentionButton.setForeground(Color.WHITE);
         lowAttentionButton.setFocusPainted(false);
         lowAttentionButton.setBorderPainted(true);
         lowAttentionButton.setOpaque(true);
         lowAttentionButton.addActionListener(e -> {
-            // TODO: Implement Low Attention Span Mode functionality
-            JOptionPane.showMessageDialog(settingsDialog, "Low Attention Span Mode - Coming Soon", "Info", JOptionPane.INFORMATION_MESSAGE);
+            // Toggle the state
+            lowAttentionModeEnabled[0] = !lowAttentionModeEnabled[0];
+
+            // Update button appearance
+            if (lowAttentionModeEnabled[0]) {
+                lowAttentionButton.setText("Low Attention Span Mode: ON");
+                lowAttentionButton.setBackground(new Color(255, 140, 0));  // Dark orange when ON
+            } else {
+                lowAttentionButton.setText("Low Attention Span Mode: OFF");
+                lowAttentionButton.setBackground(new Color(128, 128, 128));  // Gray when OFF
+            }
+
+            // Apply the mode to CurrentSalePanel
+            currentSalePanel.setLowAttentionSpanMode(lowAttentionModeEnabled[0]);
+
+            // Repaint button to show color change
+            lowAttentionButton.repaint();
         });
         applyRoundedStyle(lowAttentionButton);
 
@@ -593,25 +614,27 @@ public class PosInterface extends JFrame {
         });
         applyRoundedStyle(socketPortButton);
 
-        // Theme buttons
-        lightModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        lightModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(lightModeButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+        // API Configuration Button
+        JButton apiConfigButton = new JButton("API Configuration");
+        apiConfigButton.setFont(new Font("Arial", Font.BOLD, buttonFontSize));
+        apiConfigButton.setPreferredSize(new Dimension(0, buttonHeight));
+        apiConfigButton.setBackground(new Color(102, 51, 153)); // Purple
+        apiConfigButton.setForeground(Color.WHITE);
+        apiConfigButton.setFocusPainted(false);
+        apiConfigButton.setBorderPainted(true);
+        apiConfigButton.setOpaque(true);
+        apiConfigButton.setHorizontalAlignment(SwingConstants.CENTER);
+        apiConfigButton.addActionListener(e -> {
+            settingsDialog.dispose();
+            showApiConfigDialog();
+        });
+        applyRoundedStyle(apiConfigButton);
 
-        darkModeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        darkModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(darkModeButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        autoButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        autoButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
-        centerPanel.add(autoButton);
-        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
+        // Low Attention Span Mode
         lowAttentionButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         lowAttentionButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
         centerPanel.add(lowAttentionButton);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
 
         // Separator between theme buttons and configuration buttons
         centerPanel.add(Box.createRigidArea(new Dimension(0, 20)));
@@ -622,10 +645,15 @@ public class PosInterface extends JFrame {
         centerPanel.add(separatorPanel);
         centerPanel.add(Box.createRigidArea(new Dimension(0, 20)));
 
-        // Configuration button
+        // Configuration buttons
         socketPortButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         socketPortButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
         centerPanel.add(socketPortButton);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+
+        apiConfigButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        apiConfigButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttonHeight));
+        centerPanel.add(apiConfigButton);
 
         settingsDialog.add(centerPanel, BorderLayout.CENTER);
 
@@ -638,11 +666,11 @@ public class PosInterface extends JFrame {
     }
 
     private void updateDeleteSelectedButton() {
-        boolean hasRowSelection = currentSalePanel.hasRowSelection();
+        // Enable buttons only if an ITEM row is selected (not a discount row)
+        boolean hasItemSelected = currentSalePanel.hasItemSelected();
 
-        // Enable Delete and Change Qty buttons only if a row is selected
-        actionsPanel.setDeleteSelectedEnabled(hasRowSelection);
-        actionsPanel.setChangeQtyEnabled(hasRowSelection);
+        actionsPanel.setDeleteSelectedEnabled(hasItemSelected);
+        actionsPanel.setChangeQtyEnabled(hasItemSelected);
     }
 
     private void handleDeleteSelected() {
@@ -656,20 +684,11 @@ public class PosInterface extends JFrame {
 
         List<Integer> selectedIds = List.of(rowSelectedId);
 
-        // Create custom confirmation dialog
-        boolean confirmed = showConfirmDialog(
-            "Confirm Delete",
-            "Delete selected item?",
-            "This action will remove the selected item from the cart."
-        );
-
-        if (confirmed) {
-            try {
-                transactionService.deleteSelectedItems(selectedIds);
-                refreshSaleDisplay();
-            } catch (SQLException e) {
-                showError("Failed to delete items: " + e.getMessage());
-            }
+        try {
+            transactionService.deleteSelectedItems(selectedIds);
+            refreshSaleDisplay();
+        } catch (SQLException e) {
+            showError("Failed to delete items: " + e.getMessage());
         }
     }
 
@@ -793,19 +812,126 @@ public class PosInterface extends JFrame {
 
     /**
      * Global scanner callback - Scan error (item not found)
+     * Try validating as coupon if product not found
      */
     private void handleScanError(String errorMessage) {
         // Check if it's a "not found" error (contains UPC)
         if (!errorMessage.startsWith("Database error")) {
-            // Item not found - show warning dialog
-            actionsPanel.showWarningDialog(
-                "Product Not Found",
-                "Item Not in System",
-                "The scanned barcode does not match any item in the system.<br><br><b>Scanned Code:</b> " + errorMessage
-            );
+            // Item not found - try validating as coupon code
+            String scannedCode = errorMessage; // The error message contains the scanned UPC
+            tryValidateCouponFromScan(scannedCode);
         } else {
             // Database error
             showError(errorMessage);
+        }
+    }
+
+    /**
+     * Try to validate scanned code as a coupon.
+     * Called when a scanned code is not found in the pricebook.
+     * @param scannedCode The scanned code to validate as coupon
+     */
+    private void tryValidateCouponFromScan(String scannedCode) {
+        try {
+            // Check if coupon already applied
+            if (transactionService.hasDiscountType("COUPON")) {
+                actionsPanel.showWarningDialog(
+                    "One Coupon Per Transaction",
+                    "Cannot Apply Coupon",
+                    "Only one coupon can be applied per transaction."
+                );
+                return;
+            }
+
+            // Get cart items and subtotal
+            List<org.possystem.entity.TransactionItem> cartItems = transactionService.getCurrentSaleItems();
+            double cartSubtotal = transactionService.getTransactionSubtotal();
+
+            double discountAmount = 0.0;
+            String description = "Coupon: " + scannedCode.toUpperCase();
+            boolean isEmptyCart = cartItems.isEmpty() || cartSubtotal == 0;
+
+            // DEBUG: Log what we're sending
+            System.out.println("=== BARCODE COUPON VALIDATION DEBUG ===");
+            System.out.println("Coupon Code: " + scannedCode);
+            System.out.println("Cart Subtotal: $" + String.format("%.2f", cartSubtotal));
+            System.out.println("Cart Items Count: " + cartItems.size());
+
+            // If cart is empty, send minimal dummy data to validate coupon exists
+            if (isEmptyCart) {
+                System.out.println("Empty cart - Sending dummy data for validation");
+                // Create dummy cart item for validation
+                cartItems = List.of(new org.possystem.entity.TransactionItem(0, 0, "000000000000", "Validation", 1, 0.01, 0.01, "ACTIVE"));
+                cartSubtotal = 0.01;
+            }
+
+            // Call API to validate coupon (with real or dummy data)
+            org.possystem.dto.CouponValidationResponse response = discountApiClient.validateCoupon(
+                scannedCode,
+                cartItems,
+                cartSubtotal
+            );
+
+            // DEBUG: Log API response
+            System.out.println("API Response - Valid: " + response.valid());
+            System.out.println("API Response - Triggered: " + response.triggered());
+            if (!response.valid()) {
+                System.out.println("API Response - Error Type: " + response.errorType());
+                System.out.println("API Response - Message: " + response.message());
+            } else {
+                System.out.println("API Response - Discount Amount: $" + String.format("%.2f", response.discountAmount()));
+                if (!response.triggered()) {
+                    System.out.println("API Response - Remaining Amount: $" + String.format("%.2f", response.remainingAmount()));
+                }
+            }
+            System.out.println("==============================");
+
+            // Check if coupon is valid (exists and not expired)
+            if (!response.valid()) {
+                // Silent failure for invalid/expired coupons scanned via barcode
+                System.out.println("Scanned coupon invalid: " + scannedCode + " - " + response.message());
+                return;
+            }
+
+            // Coupon is valid - get discount amount and description from API
+            // If cart was empty, use $0 discount (ignore API amount from dummy data)
+            if (isEmptyCart) {
+                discountAmount = 0.0;
+                description = response.description() != null ? response.description() : "Coupon: " + scannedCode.toUpperCase();
+                System.out.println("Empty cart - Using $0 discount (will recalculate when items added)");
+            } else {
+                // For non-empty carts, only use discount amount if triggered
+                if (response.triggered()) {
+                    discountAmount = response.discountAmount() != null ? response.discountAmount() : 0.0;
+                    System.out.println("Coupon triggered - Applying discount: $" + discountAmount);
+                } else {
+                    discountAmount = 0.0;
+                    System.out.println("Coupon not triggered (minimum not met) - Using $0 discount");
+                }
+                description = response.description() != null ? response.description() : "Coupon: " + scannedCode.toUpperCase();
+            }
+
+            System.out.println("Applying coupon " + scannedCode + " with discount: $" + discountAmount);
+
+            transactionService.applyCouponDiscount(
+                scannedCode.toUpperCase(),
+                -discountAmount, // Store as negative
+                description
+            );
+
+            // Show simple success toast notification
+            String toastMessage = String.format("%s applied", scannedCode.toUpperCase());
+            ToastNotification.showToast(this, "Coupon Applied", toastMessage);
+
+            refreshSaleDisplay();
+
+        } catch (Exception e) {
+            // DEBUG: Print full stack trace
+            System.err.println("=== BARCODE COUPON VALIDATION EXCEPTION ===");
+            System.err.println("Exception type: " + e.getClass().getName());
+            System.err.println("Exception message: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("===========================================");
         }
     }
 
@@ -825,7 +951,7 @@ public class PosInterface extends JFrame {
         confirmDialog.setResizable(false);
         confirmDialog.setSize(400, 280);
         confirmDialog.setMinimumSize(new Dimension(350, 280));
-        confirmDialog.setLocationRelativeTo(null);
+        confirmDialog.setLocationRelativeTo(this);
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -926,6 +1052,23 @@ public class PosInterface extends JFrame {
         dialog.setVisible(true);
     }
 
+    private void showApiConfigDialog() {
+        // Disable barcode scanner while API config dialog is open
+        globalScanner.disableForDialog();
+
+        ApiConfigDialog dialog = new ApiConfigDialog(this, configManager, discountApiClient);
+
+        // Re-enable scanner when dialog closes
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                globalScanner.enable();
+            }
+        });
+
+        dialog.setVisible(true);
+    }
+
     private String showInputDialog(String title, String message, String itemName, String currentInfo, String defaultValue) {
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         int screenHeight = screenSize.height;
@@ -946,7 +1089,7 @@ public class PosInterface extends JFrame {
         inputDialog.setResizable(false);   // Prevent resizing
         inputDialog.setSize(dialogWidth, dialogHeight);
         inputDialog.setMinimumSize(new Dimension(400, 550));
-        inputDialog.setLocationRelativeTo(null); // Center on screen
+        inputDialog.setLocationRelativeTo(this); // Center on parent window
         inputDialog.setLayout(new BorderLayout());
 
         // Header Panel with blue info color
@@ -1474,6 +1617,126 @@ public class PosInterface extends JFrame {
 
     private void showError(String message) {
         showErrorDialog("Error", "System Error", message);
+    }
+
+    /**
+     * Setup idle detection to show carousel after 2 minutes of inactivity
+     */
+    private void setupIdleDetection() {
+        // Create idle timer (2 minutes)
+        idleTimer = new Timer(IDLE_TIMEOUT_MS, e -> showCarousel());
+        idleTimer.setRepeats(false); // Only fire once
+        idleTimer.start();
+
+        // Add global mouse listener to detect activity
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            resetIdleTimer();
+        }, AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
+
+        // Add global keyboard listener to detect activity
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            resetIdleTimer();
+        }, AWTEvent.KEY_EVENT_MASK);
+    }
+
+    /**
+     * Reset the idle timer when user activity is detected
+     */
+    private void resetIdleTimer() {
+        if (idleTimer != null && idleTimer.isRunning()) {
+            idleTimer.restart();
+        } else if (idleTimer != null && carousel == null) {
+            // Only restart if carousel is not currently showing
+            idleTimer.restart();
+        }
+    }
+
+    /**
+     * Show the carousel overlay when idle timeout is reached
+     */
+    private void showCarousel() {
+        if (carousel != null) {
+            return; // Already showing
+        }
+
+        System.out.println("Idle timeout reached - showing carousel");
+
+        // Hide POS interface
+        setVisible(false);
+
+        // Create and show carousel (pass 'this' to match POS position/size)
+        carousel = new LockScreenCarousel(this, () -> {
+            // When user clicks to unlock
+            System.out.println("Carousel unlocked - returning to POS");
+
+            // Dispose carousel
+            if (carousel != null) {
+                carousel.dispose();
+                carousel = null;
+            }
+
+            // Show POS interface again
+            setVisible(true);
+            toFront();
+            requestFocus();
+
+            // Restart idle timer
+            if (idleTimer != null) {
+                idleTimer.restart();
+            }
+        });
+
+        carousel.setVisible(true);
+    }
+
+    /**
+     * Toggle between maximized and normal window state.
+     * Double-click on header to maximize to current screen or restore previous size.
+     */
+    private void toggleMaximize() {
+        if (isMaximized) {
+            // Restore to previous bounds
+            if (previousBounds != null) {
+                setBounds(previousBounds);
+                isMaximized = false;
+                previousBounds = null;
+            }
+        } else {
+            // Save current bounds before maximizing
+            previousBounds = getBounds();
+
+            // Get the screen device that contains most of the window
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            GraphicsDevice[] screens = ge.getScreenDevices();
+
+            GraphicsDevice targetScreen = null;
+            Rectangle windowBounds = getBounds();
+            int maxOverlap = 0;
+
+            // Find which screen has the most overlap with current window
+            for (GraphicsDevice screen : screens) {
+                Rectangle screenBounds = screen.getDefaultConfiguration().getBounds();
+                Rectangle intersection = windowBounds.intersection(screenBounds);
+                int overlap = intersection.width * intersection.height;
+
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    targetScreen = screen;
+                }
+            }
+
+            // Maximize to the target screen (or default if not found)
+            if (targetScreen != null) {
+                Rectangle screenBounds = targetScreen.getDefaultConfiguration().getBounds();
+                setBounds(screenBounds);
+            } else {
+                // Fallback to toolkit screen size
+                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+                setBounds(0, 0, screenSize.width, screenSize.height);
+            }
+
+            isMaximized = true;
+        }
     }
 
     public static void main(String[] args) {

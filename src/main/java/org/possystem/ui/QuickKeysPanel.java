@@ -643,10 +643,24 @@ public class QuickKeysPanel extends JPanel {
                 ? item.name().substring(0, 22) + "..."
                 : item.name();
 
+            // Green price text for all items (promotional and regular)
+            String priceColor = "green";
+
             JButton btn = new JButton("<html><center>" +
-                displayName + "<br><font color='green'>$" + String.format("%.2f", item.price()) + "</font>" +
+                displayName + "<br><font color='" + priceColor + "'>$" + String.format("%.2f", item.price()) + "</font>" +
                 "</center></html>");
             btn.setPreferredSize(new Dimension(120, 80));
+
+            // Apply light violet color for promotional items
+            if (item.hasPromotion()) {
+                btn.setBackground(new Color(230, 200, 255)); // Light violet for promo items
+                btn.setForeground(new Color(80, 40, 120)); // Dark violet text for contrast
+                btn.setFont(new Font("Arial", Font.BOLD, 12));
+                btn.setOpaque(true);
+                btn.setBorderPainted(true);
+                btn.setBorder(new RoundedBorder(12, new Color(180, 150, 215))); // Rounded border
+            }
+
             btn.addActionListener(e -> onItemSelected.accept(item));
             quickKeysGridPanel.add(btn);
         }
@@ -799,7 +813,7 @@ public class QuickKeysPanel extends JPanel {
         actionDialog.setResizable(false);
         actionDialog.setSize(dialogWidth, dialogHeight);
         actionDialog.setMinimumSize(new Dimension(320, 300));
-        actionDialog.setLocationRelativeTo(null);  // Center on screen
+        actionDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this));  // Center on parent window
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -904,7 +918,7 @@ public class QuickKeysPanel extends JPanel {
         detailsDialog.setResizable(false);
         detailsDialog.setSize(dialogWidth, dialogHeight);
         detailsDialog.setMinimumSize(new Dimension(350, 400));
-        detailsDialog.setLocationRelativeTo(null);
+        detailsDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this));
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -1461,5 +1475,42 @@ public class QuickKeysPanel extends JPanel {
         });
 
         return keyButton;
+    }
+
+    /**
+     * Custom Border class for rounded corners that doesn't interfere with button text rendering.
+     */
+    private static class RoundedBorder extends javax.swing.border.AbstractBorder {
+        private final int radius;
+        private final Color borderColor;
+
+        RoundedBorder(int radius, Color borderColor) {
+            this.radius = radius;
+            this.borderColor = borderColor;
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            g2d.setColor(borderColor);
+            g2d.setStroke(new BasicStroke(2));
+            g2d.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
+
+            g2d.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c) {
+            return new Insets(10, 15, 10, 15);
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c, Insets insets) {
+            insets.left = insets.right = 15;
+            insets.top = insets.bottom = 10;
+            return insets;
+        }
     }
 }
