@@ -35,6 +35,10 @@ public class PosInterface extends JFrame {
     private static final int IDLE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
     private LockScreenCarousel carousel;
 
+    // Window state for maximize/restore
+    private boolean isMaximized = false;
+    private Rectangle previousBounds = null;
+
     public PosInterface() {
         this.configManager = new ConfigManager();
         this.priceBookService = new PriceBookService();
@@ -271,7 +275,7 @@ public class PosInterface extends JFrame {
         JButton closeButton = createCloseButton();
         headerPanel.add(closeButton, BorderLayout.EAST);
 
-        // Add window dragging functionality
+        // Add window dragging functionality and double-click to maximize
         final Point[] mouseDownCompCoords = {null};
 
         headerPanel.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -283,6 +287,14 @@ public class PosInterface extends JFrame {
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 mouseDownCompCoords[0] = null;
+            }
+
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                // Double-click to maximize/restore
+                if (e.getClickCount() == 2) {
+                    toggleMaximize();
+                }
             }
         });
 
@@ -939,7 +951,7 @@ public class PosInterface extends JFrame {
         confirmDialog.setResizable(false);
         confirmDialog.setSize(400, 280);
         confirmDialog.setMinimumSize(new Dimension(350, 280));
-        confirmDialog.setLocationRelativeTo(null);
+        confirmDialog.setLocationRelativeTo(this);
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -1077,7 +1089,7 @@ public class PosInterface extends JFrame {
         inputDialog.setResizable(false);   // Prevent resizing
         inputDialog.setSize(dialogWidth, dialogHeight);
         inputDialog.setMinimumSize(new Dimension(400, 550));
-        inputDialog.setLocationRelativeTo(null); // Center on screen
+        inputDialog.setLocationRelativeTo(this); // Center on parent window
         inputDialog.setLayout(new BorderLayout());
 
         // Header Panel with blue info color
@@ -1652,8 +1664,8 @@ public class PosInterface extends JFrame {
         // Hide POS interface
         setVisible(false);
 
-        // Create and show carousel
-        carousel = new LockScreenCarousel(() -> {
+        // Create and show carousel (pass 'this' to match POS position/size)
+        carousel = new LockScreenCarousel(this, () -> {
             // When user clicks to unlock
             System.out.println("Carousel unlocked - returning to POS");
 
@@ -1675,6 +1687,56 @@ public class PosInterface extends JFrame {
         });
 
         carousel.setVisible(true);
+    }
+
+    /**
+     * Toggle between maximized and normal window state.
+     * Double-click on header to maximize to current screen or restore previous size.
+     */
+    private void toggleMaximize() {
+        if (isMaximized) {
+            // Restore to previous bounds
+            if (previousBounds != null) {
+                setBounds(previousBounds);
+                isMaximized = false;
+                previousBounds = null;
+            }
+        } else {
+            // Save current bounds before maximizing
+            previousBounds = getBounds();
+
+            // Get the screen device that contains most of the window
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            GraphicsDevice[] screens = ge.getScreenDevices();
+
+            GraphicsDevice targetScreen = null;
+            Rectangle windowBounds = getBounds();
+            int maxOverlap = 0;
+
+            // Find which screen has the most overlap with current window
+            for (GraphicsDevice screen : screens) {
+                Rectangle screenBounds = screen.getDefaultConfiguration().getBounds();
+                Rectangle intersection = windowBounds.intersection(screenBounds);
+                int overlap = intersection.width * intersection.height;
+
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    targetScreen = screen;
+                }
+            }
+
+            // Maximize to the target screen (or default if not found)
+            if (targetScreen != null) {
+                Rectangle screenBounds = targetScreen.getDefaultConfiguration().getBounds();
+                setBounds(screenBounds);
+            } else {
+                // Fallback to toolkit screen size
+                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+                setBounds(0, 0, screenSize.width, screenSize.height);
+            }
+
+            isMaximized = true;
+        }
     }
 
     public static void main(String[] args) {

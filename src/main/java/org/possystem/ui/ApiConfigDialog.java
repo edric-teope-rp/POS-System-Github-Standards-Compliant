@@ -39,11 +39,8 @@ public class ApiConfigDialog extends JDialog {
         setSize(600, 450);
         setMinimumSize(new Dimension(500, 400));
 
-        // Position at upper center of screen (so keyboard doesn't cover it)
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        int x = (screenSize.width - 600) / 2;  // Center horizontally
-        int y = screenSize.height / 6;  // Upper portion (1/6 from top)
-        setLocation(x, y);
+        // Center on parent window
+        setLocationRelativeTo(parent);
 
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     }

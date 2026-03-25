@@ -813,7 +813,7 @@ public class QuickKeysPanel extends JPanel {
         actionDialog.setResizable(false);
         actionDialog.setSize(dialogWidth, dialogHeight);
         actionDialog.setMinimumSize(new Dimension(320, 300));
-        actionDialog.setLocationRelativeTo(null);  // Center on screen
+        actionDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this));  // Center on parent window
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -918,7 +918,7 @@ public class QuickKeysPanel extends JPanel {
         detailsDialog.setResizable(false);
         detailsDialog.setSize(dialogWidth, dialogHeight);
         detailsDialog.setMinimumSize(new Dimension(350, 400));
-        detailsDialog.setLocationRelativeTo(null);
+        detailsDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this));
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));

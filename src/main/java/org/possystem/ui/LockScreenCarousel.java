@@ -37,17 +37,47 @@ public class LockScreenCarousel extends JFrame {
     /**
      * Create the lock screen carousel.
      *
+     * @param parentWindow Optional parent window to match position/size (null for primary screen)
      * @param onUnlockCallback Callback to execute when user taps to unlock
      */
-    public LockScreenCarousel(Runnable onUnlockCallback) {
+    public LockScreenCarousel(Window parentWindow, Runnable onUnlockCallback) {
         this.onUnlockCallback = onUnlockCallback;
 
         System.out.println("=== LockScreenCarousel Initializing ===");
 
+        // Determine carousel size and position based on parent
+        Dimension carouselSize;
+        Point carouselLocation;
+        boolean shouldMaximize = false;
+
+        if (parentWindow != null) {
+            // Follow parent window (idle timeout case)
+            Rectangle bounds = parentWindow.getBounds();
+            carouselSize = new Dimension(bounds.width, bounds.height);
+            carouselLocation = new Point(bounds.x, bounds.y);
+
+            // Check if parent is maximized
+            if (parentWindow instanceof Frame) {
+                Frame frame = (Frame) parentWindow;
+                shouldMaximize = (frame.getExtendedState() & Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH;
+            }
+
+            System.out.println("Following parent window: " + bounds.width + "x" + bounds.height +
+                             " at (" + bounds.x + ", " + bounds.y + ")");
+            if (shouldMaximize) {
+                System.out.println("Parent is maximized - carousel will maximize too");
+            }
+        } else {
+            // Startup case - use primary screen
+            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+            carouselSize = screenSize;
+            carouselLocation = new Point(0, 0);
+            System.out.println("Using primary screen: " + screenSize.width + "x" + screenSize.height);
+        }
+
         // Load images
         images = new BufferedImage[imagePaths.length];
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        System.out.println("Screen size: " + screenSize.width + "x" + screenSize.height);
+        System.out.println("Carousel size: " + carouselSize.width + "x" + carouselSize.height);
 
         int loadedCount = 0;
         for (int i = 0; i < imagePaths.length; i++) {
@@ -62,8 +92,8 @@ public class LockScreenCarousel extends JFrame {
                     if (icon.getImageLoadStatus() == MediaTracker.COMPLETE || icon.getIconWidth() > 0) {
                         Image originalImage = icon.getImage();
 
-                        // Create BufferedImage and scale it
-                        images[i] = new BufferedImage(screenSize.width, screenSize.height, BufferedImage.TYPE_INT_RGB);
+                        // Create BufferedImage and scale it to carousel size
+                        images[i] = new BufferedImage(carouselSize.width, carouselSize.height, BufferedImage.TYPE_INT_RGB);
                         Graphics2D g2d = images[i].createGraphics();
                         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
                         g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
@@ -71,21 +101,21 @@ public class LockScreenCarousel extends JFrame {
 
                         // Fill with black background first
                         g2d.setColor(Color.BLACK);
-                        g2d.fillRect(0, 0, screenSize.width, screenSize.height);
+                        g2d.fillRect(0, 0, carouselSize.width, carouselSize.height);
 
-                        // Draw image scaled to fit inside screen while maintaining aspect ratio (with letterboxing)
+                        // Draw image scaled to fit inside carousel while maintaining aspect ratio (with letterboxing)
                         int imgWidth = icon.getIconWidth();
                         int imgHeight = icon.getIconHeight();
 
-                        double scaleX = (double) screenSize.width / imgWidth;
-                        double scaleY = (double) screenSize.height / imgHeight;
-                        double scale = Math.min(scaleX, scaleY); // Fit inside screen (letterbox)
+                        double scaleX = (double) carouselSize.width / imgWidth;
+                        double scaleY = (double) carouselSize.height / imgHeight;
+                        double scale = Math.min(scaleX, scaleY); // Fit inside carousel (letterbox)
 
                         int scaledWidth = (int) (imgWidth * scale);
                         int scaledHeight = (int) (imgHeight * scale);
 
-                        int x = (screenSize.width - scaledWidth) / 2;
-                        int y = (screenSize.height - scaledHeight) / 2;
+                        int x = (carouselSize.width - scaledWidth) / 2;
+                        int y = (carouselSize.height - scaledHeight) / 2;
 
                         g2d.drawImage(originalImage, x, y, scaledWidth, scaledHeight, null);
                         g2d.dispose();
@@ -110,7 +140,7 @@ public class LockScreenCarousel extends JFrame {
             System.err.println("WARNING: No carousel images loaded! Lock screen will be blank.");
         }
 
-        setupWindow(screenSize);
+        setupWindow(carouselSize, carouselLocation, shouldMaximize);
         setupCarouselPanel();
         setupClickListener();
         startCycleTimer();
@@ -119,20 +149,27 @@ public class LockScreenCarousel extends JFrame {
         System.out.println("=======================================");
     }
 
-    private void setupWindow(Dimension screenSize) {
+    private void setupWindow(Dimension size, Point location, boolean shouldMaximize) {
         // Remove window decorations
         setUndecorated(true);
 
-        // Borderless full-screen window mode (allows dialogs to work)
-        setSize(screenSize);
-        setLocation(0, 0);
+        // Set size and position
+        setSize(size);
+        setLocation(location);
         setResizable(false);
         setAlwaysOnTop(true);
 
+        // Maximize if needed (after setting size/location)
+        if (shouldMaximize) {
+            setExtendedState(Frame.MAXIMIZED_BOTH);
+            System.out.println("Carousel: Configured as maximized window");
+        } else {
+            System.out.println("Carousel: Configured at " + size.width + "x" + size.height +
+                             " at (" + location.x + ", " + location.y + ")");
+        }
+
         // Set cursor to hand to indicate clickable
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        System.out.println("Carousel: Configured as borderless full-screen window");
     }
 
     private void setupCarouselPanel() {

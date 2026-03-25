@@ -83,8 +83,8 @@ public class DiscountDialog extends JDialog {
         // Add border around entire dialog for definition
         getRootPane().setBorder(BorderFactory.createLineBorder(new Color(100, 100, 100), 2));
 
-        // Center on screen
-        setLocationRelativeTo(null);
+        // Center on parent window
+        setLocationRelativeTo(getParent());
 
         initializeComponents();
         layoutComponents();

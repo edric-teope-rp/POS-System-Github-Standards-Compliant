@@ -214,6 +214,9 @@ public class CurrentSalePanel extends JPanel {
             // Display only Senior/Veteran/Coupon discounts in totals panel
             for (TransactionDiscount discount : activeDiscounts) {
                 String discountText = "";
+                Color discountColor = new Color(100, 100, 100); // Default gray
+                boolean isCouponNotTriggered = false;
+
                 if (discount.discountType().equals("SENIOR")) {
                     discountText = String.format("Senior Discount (5%%): -$%.2f", Math.abs(discount.discountAmount()));
                 } else if (discount.discountType().equals("VETERAN")) {
@@ -221,10 +224,20 @@ public class CurrentSalePanel extends JPanel {
                 } else if (discount.discountType().equals("COUPON")) {
                     // Get the coupon code for this discount
                     String couponCode = transactionService.getCouponCodeForDiscount(discount.id());
+
+                    // Check if coupon minimum is met (discount > 0 means triggered)
+                    boolean isTriggered = Math.abs(discount.discountAmount()) > 0.01;
+
                     if (couponCode != null && !couponCode.isEmpty()) {
                         discountText = String.format("Coupon (%s): -$%.2f", couponCode, Math.abs(discount.discountAmount()));
                     } else {
                         discountText = String.format("Coupon Discount: -$%.2f", Math.abs(discount.discountAmount()));
+                    }
+
+                    // If not triggered, use greyish-red color and flag for note
+                    if (!isTriggered) {
+                        discountColor = new Color(150, 80, 80); // Greyish-red
+                        isCouponNotTriggered = true;
                     }
                 }
                 // Skip PROMOTIONAL - they're now shown in the table
@@ -232,9 +245,18 @@ public class CurrentSalePanel extends JPanel {
                 if (!discountText.isEmpty()) {
                     JLabel discountLabel = new JLabel(discountText);
                     discountLabel.setFont(new Font("Arial", Font.ITALIC, 18));
-                    discountLabel.setForeground(new Color(100, 100, 100)); // Gray color
+                    discountLabel.setForeground(discountColor);
                     discountLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
                     discountsPanel.add(discountLabel);
+
+                    // Add note for untriggered coupons
+                    if (isCouponNotTriggered) {
+                        JLabel noteLabel = new JLabel("  (Minimum purchase requirement not met)");
+                        noteLabel.setFont(new Font("Arial", Font.ITALIC, 14));
+                        noteLabel.setForeground(discountColor);
+                        noteLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        discountsPanel.add(noteLabel);
+                    }
                 }
             }
 
@@ -474,7 +496,7 @@ public class CurrentSalePanel extends JPanel {
         confirmDialog.setResizable(false);
         confirmDialog.setSize(400, 280);
         confirmDialog.setMinimumSize(new Dimension(350, 280));
-        confirmDialog.setLocationRelativeTo(null);
+        confirmDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this));
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));

@@ -6,15 +6,9 @@ I'm continuing work on my Java POS System project. Here's the context from my pr
 
 ---
 
-## ⚠️ CRITICAL: READ THESE FILES FIRST
+## PROJECT STATUS
 
-Before starting any work, you MUST read these files to understand the current implementation plan:
-
-1. **`phase_3_on_progress.md`** - Complete step-by-step implementation guide for Phase 3 integration (Phases 3A & 3B COMPLETE, 3C NEXT)
-2. **`hand_off_for_phase_3.md`** - Discount Engine API reference (endpoints, schemas, integration details)
-3. **`DISCOUNT_API_DATA_SYNC_PROMPT.md`** - UPC list for discount-engine-api team (data synchronization)
-
-These files contain essential information for Phase 3 integration work.
+All phases complete and deployed to production! The discount engine API has been deployed to the web and successfully tested with the POS system.
 
 ---
 
@@ -24,7 +18,7 @@ These files contain essential information for Phase 3 integration work.
 - **Main Branch**: main
 - **Build**: ✅ Successful
 - **Tech**: Java 25, Gradle, H2 Database, Swing GUI, SLF4J+Logback, Gson (for JSON)
-- **Status**: Phase 1 ✅ COMPLETE, Phase 2 ✅ COMPLETE, **Phase 3A ✅ COMPLETE, Phase 3B ✅ COMPLETE, Phase 3C ✅ COMPLETE**
+- **Status**: Phase 1 ✅ COMPLETE, Phase 2 🔧 NEEDS POLISH, **Phase 3A ✅ COMPLETE, Phase 3B ✅ COMPLETE, Phase 3C ✅ COMPLETE**
 
 ---
 
@@ -32,8 +26,12 @@ These files contain essential information for Phase 3 integration work.
 
 ### PHASE 1: Standalone POS System ✅ COMPLETE
 
-#### Component 1: Lock Screen
-- **Status**: ❌ DEFERRED (will implement later if needed)
+#### Component 1: Authentication/Lock Screen
+- **Status**: 🤔 UNDER CONSIDERATION
+- **Potential Scope**: PIN-based authentication for accessing Settings dialogs
+  - API Configuration access protection
+  - Socket Configuration access protection
+- **Note**: Subject for discussion - implementation approach to be determined
 
 #### Component 2: POS Interface ✅ COMPLETE + POLISHED
 - Main transaction interface (Quick Keys, Current Sale, Actions zones)
@@ -52,14 +50,11 @@ These files contain essential information for Phase 3 integration work.
 - Receipt display with custom styling
 - "New Transaction" button flow
 
-#### Component 4: Theme Modes
-- **Status**: ❌ DEFERRED (will implement later if needed)
-
 ---
 
-### PHASE 2: Multi-POS Journal Viewer ✅ COMPLETE
+### PHASE 2: Multi-POS Journal Viewer 🔧 NEEDS POLISH
 
-#### Core Features: ✅ PRODUCTION READY
+#### Core Features: ✅ IMPLEMENTED
 - Java socket server/client architecture (bidirectional)
 - UDP broadcast auto-discovery (port 9999)
 - Real-time journal synchronization
@@ -71,14 +66,19 @@ These files contain essential information for Phase 3 integration work.
 - Socket Configuration Dialog UI with Active Clients section
 - Manual connection support (IP:Port) with proper table display
 - Connection persistence (saved to `config/socket-config.json`)
-- **Status**: ✅ Production Ready, Fully Tested
+
+#### Known Issues / Polish Needed: 🔧
+- ⚠️ **Multi-POS compatibility**: Works on one POS but not connecting properly with other POS instances
+- 🔧 **Disconnect buttons**: Need to review and polish disconnect functionality
+- 🔧 **Socket discovery**: Implement automatic reading/scanning of all available Java sockets
+- **Status**: Core features implemented, requires debugging and polish for production use
 
 ---
 
 ### PHASE 3: Discount Service (Spring Boot REST API) ✅ ALL PHASES COMPLETE!
 
-- **Discount Engine API**: ✅ Complete and running at `/Users/ed/IdeaProjects/discount-engine-api`
-- **API Base URL**: `http://localhost:8080/api/discounts`
+- **Discount Engine API**: ✅ Deployed to production (web)
+- **API Configuration**: Configurable via POS Settings → API Configuration dialog
 - **Implementation Approach**: Incremental (3A → 3B → 3C)
 - **Current Status**:
   - **Phase 3A (Promotional Discounts)**: ✅ COMPLETE
@@ -88,11 +88,13 @@ These files contain essential information for Phase 3 integration work.
 - **API Reference**: See `hand_off_for_phase_3.md` for API endpoints and schemas
 
 #### Phase 3 UI Provisions ✅ COMPLETE
-- **Promotional Products**: 17 items with light violet buttons (RGB: 230, 200, 255)
+- **Promotional Products**: 12 promotional items with light violet buttons (RGB: 230, 200, 255)
+- **Featured Products**: 48 total products (12 promotional + 36 regular) across 4 pages
+- **Randomization**: Promotional products distributed across all pages (~3 per page)
 - **Database**: `has_promotion` boolean column added to `price_book` table
-- **Discount Button**: Purple button added to Transaction Actions (placeholder ready)
+- **Discount Button**: Purple button added to Transaction Actions (fully integrated)
 - **Layout**: Current Sale width reduced to 35% for better button readability
-- **Ready for Integration**: All UI components styled and positioned for Spring Boot API calls
+- **Performance**: API optimization ensures regular items add instantly (no lag)
 
 #### Phase 3 Integration Plan ✅ COMPLETE
 - **HTTP Client**: Java 11+ HttpClient (no new dependencies)
@@ -109,6 +111,66 @@ These files contain essential information for Phase 3 integration work.
 ---
 
 ## RECENT WORK COMPLETED (Latest Session)
+
+### v3.5 - Performance Optimization & Promotional Products Enhancement (2026-03-25) ✅
+
+#### API Call Optimization - PRODUCTION READY ✅
+
+✅ **Conditional API Calls Implementation:**
+- Added `hasActiveCoupons()` helper method to check coupon existence
+- Added `hasPromotionalItems()` helper method to check promotional item existence
+- Added `checkAndApplyPromotionalDiscount(String upc)` for single-item checks
+- Optimized `addItem()` method to skip API calls for regular items
+- Optimized `voidItem()` method to conditionally check promotions/coupons
+- Optimized `updateQuantity()` method to check only the specific item
+- Optimized `deleteSelectedItems()` method to conditionally recalculate
+
+✅ **Performance Improvements:**
+- **Regular items**: Add instantly with ZERO API calls (no lag)
+- **Promotional items**: Only 1 API call per item addition (not all items)
+- **Coupons**: Only recalculated when coupons actually exist in cart
+- Console logs show optimization messages confirming skipped API calls
+- Dramatic performance boost for mixed carts (regular + promotional items)
+
+✅ **Optimization Logic:**
+```
+Add regular item + no coupons → SKIP all API calls
+Add regular item + has coupons → Only recalculate coupons
+Add promotional item → Only call API for that ONE item
+Void item → Only recalculate if promotional items/coupons remain
+```
+
+#### Promotional Products Enhancement ✅
+
+✅ **48 Featured Products (4 Pages):**
+- 12 promotional products (has_promotion=true) with purple buttons
+- 36 regular products (has_promotion=false) to fill remaining positions
+- Products randomized across 4 pages of Quick Keys grid
+- Promotional products distributed evenly: ~3 per page
+
+✅ **Promotional Product Positions:**
+- Page 1 (1-12): Positions 1, 7, 10
+- Page 2 (13-24): Positions 15, 18, 22
+- Page 3 (25-36): Positions 26, 30, 34
+- Page 4 (37-48): Positions 39, 42, 45
+- First CIR K POLAR POP LARG kept at position 1 (highest priority)
+
+✅ **Database Reset Scripts:**
+- Created `reset_database.sh` - Deletes ~/possystemdb.mv.db to force reseed
+- Created `apply_promotion_update.sh` - Helper with database update instructions
+- Created `update_promotions.sql` - SQL script for manual promotional flag updates
+- Updated `pricebook.tsv` with randomized positions for all 48 featured products
+
+✅ **Testing Completed:**
+- All discount types working flawlessly (promotional, senior, veteran, coupon)
+- Performance verified: regular items add instantly (no lag)
+- Promotional items trigger discounts correctly at quantity 2+
+- Coupons validate and recalculate in real-time
+- Mixed scenarios tested (promotions + coupons + senior/veteran)
+
+**Status:** Performance optimization complete, promotional products enhanced! 🚀
+
+---
 
 ### v3.4 - Phase 3C COMPLETE! (2026-03-23) ✅
 
@@ -348,11 +410,13 @@ These files contain essential information for Phase 3 integration work.
 - Updated `PriceBook` entity with `hasPromotion` field
 - Updated `PriceBookDao` to read new column
 - Updated `DataSeeder` to parse 6-column TSV format
-- 17 products marked as promotional (6 featured + 11 random)
+- 12 products marked as promotional (API-verified only)
+- 48 featured products total (12 promotional + 36 regular) across 4 pages
 - Light violet button color (RGB: 230, 200, 255) for promotional items
 - Dark violet text (RGB: 80, 40, 120) with green price display
 - Rounded corners (12px radius) using custom `RoundedBorder` class
 - HTML rendering support maintained
+- Randomized positions to distribute promotions across all pages
 
 ✅ **Discount Button Added:**
 - New "Discount" button in Transaction Actions zone
@@ -393,17 +457,18 @@ These files contain essential information for Phase 3 integration work.
 - `DiscountDialog.java` (discount options dialog - senior, veteran, coupon) ✨ NEW
 - `GlobalBarcodeScanner.java` (global keyboard interceptor)
 
-### Discount System Files ✨ NEW
+### Discount System Files ✨
 - **Entity**: `src/main/java/org/possystem/entity/TransactionDiscount.java`
 - **DAO**: `src/main/java/org/possystem/dao/TransactionDiscountDao.java`
 - **DTOs**:
   - `src/main/java/org/possystem/dto/SeniorVeteranDiscountResponse.java`
   - `src/main/java/org/possystem/dto/PromotionalDiscountResponse.java`
+  - `src/main/java/org/possystem/dto/CouponValidationResponse.java`
 - **UI Components**:
   - `src/main/java/org/possystem/ui/DiscountDialog.java`
   - `src/main/java/org/possystem/ui/ToastNotification.java`
-- **Documentation**:
-  - `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
+- **API Client**:
+  - `src/main/java/org/possystem/service/DiscountApiClient.java`
 
 ### Socket Files (socket package)
 - `SocketService.java` (server + client + discovery logic)
@@ -508,8 +573,10 @@ These files contain essential information for Phase 3 integration work.
 - ✅ Global barcode scanner works everywhere (except excluded dialogs)
 - ✅ No icons in UI (clean, text-based interface)
 - ✅ Void Item button deletes immediately without confirmation (faster workflow)
-- ✅ Discount Engine API running at `http://localhost:8080/api/discounts`
-- ✅ Phase 3 implementation follows incremental approach (3A → 3B → 3C)
+- ✅ Discount Engine API deployed to production web server (configurable via Settings)
+- ✅ Phase 3 complete: Promotional, Senior/Veteran, and Coupon discounts fully operational
+- ✅ **API optimization**: Regular items add instantly (no API calls), promotional items call API only once
+- ✅ **48 featured products**: 12 promotional (purple buttons) + 36 regular, randomized across 4 pages
 
 ---
 
@@ -573,31 +640,31 @@ These files contain essential information for Phase 3 integration work.
 ## SESSION START INSTRUCTIONS
 
 1. Confirm you see the project at `/Users/ed/IdeaProjects/POSSystem`
-2. Check current branch (should be feature/provisioned-for-phase-3)
+2. Check current branch
 3. Confirm build is successful (`./gradlew build`)
-4. **READ REQUIRED FILES:**
-   - **MUST READ**: `phase_3_on_progress.md` - Current progress and next steps
-   - **MUST READ**: `hand_off_for_phase_3.md` - API endpoints, schemas, and integration details
-   - **MUST READ**: `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api
-5. Acknowledge you understand the step-by-step approach and the "?" protocol
-6. **Current status**: Phase 3A & 3B COMPLETE! 🎉
-   - Next priority: Phase 3C (Coupon Support)
-7. Wait for me to provide the next task or direction
+4. Acknowledge you understand the step-by-step approach and the "?" protocol
+5. **Current status**:
+   - Phase 1: ✅ Core POS functionality - COMPLETE
+   - Phase 2: 🔧 Multi-POS journal viewer - NEEDS POLISH (connection issues between POS instances)
+   - Phase 3: ✅ Full discount system - DEPLOYED TO PRODUCTION
+6. Wait for me to provide the next task or direction
 
 ---
 
-## ROADMAP PRIORITIES
+## ROADMAP STATUS
 
-1. ✅ **DONE**: Phase 1 Complete (POS interface with icon removal and global scanner)
-2. ✅ **DONE**: Phase 2 Complete (multi-POS journal viewer)
-3. ✅ **DONE**: Phase 3 UI Provisions (promotional buttons, discount button, layout optimization)
-4. ✅ **DONE**: Discount Engine API Complete (Spring Boot REST API running)
-5. ✅ **DONE**: Phase 3 Integration Planning Complete (all decisions finalized)
-6. ✅ **DONE**: Phase 3A - Promotional Discounts (inline display, toast notifications)
-7. ✅ **DONE**: Phase 3B - Senior/Veteran Discounts (totals display, dialog auto-close)
-8. ✅ **DONE**: Phase 3C - Coupon Support (progressive disclosure, empty cart validation, single scanner)
-9. 🎉 **COMPLETE**: All 3 Phases PRODUCTION READY!
-10. ⏭️ **FUTURE**: Phase 1 deferred items (Lock Screen, Theme Modes) - if needed
+1. ✅ **Phase 1**: Core POS functionality (POS interface with icon removal and global scanner)
+2. 🔧 **Phase 2**: Multi-POS journal viewer (needs polish - multi-POS compatibility issues)
+   - ⚠️ Works on single POS but connection issues between multiple POS instances
+   - 🔧 Disconnect buttons need review
+   - 🔧 Automatic socket discovery needs implementation
+3. ✅ **Phase 3**: Full discount system deployed to production
+   - ✅ Phase 3A: Promotional Discounts (inline display, toast notifications)
+   - ✅ Phase 3B: Senior/Veteran Discounts (totals display, dialog auto-close)
+   - ✅ Phase 3C: Coupon Support (progressive disclosure, barcode scanning, validation)
+4. 🎉 **Phases 1 & 3 PRODUCTION READY AND DEPLOYED!**
+5. 🔧 **IN PROGRESS**: Phase 2 debugging and polish
+6. 🤔 **UNDER CONSIDERATION**: Authentication for Settings access (API/Socket Configuration protection)
 
 ---
 
@@ -606,11 +673,11 @@ These files contain essential information for Phase 3 integration work.
 ### ✅ COMPLETED
 
 #### 1. Discount Engine API (Spring Boot)
-- ✅ Complete and running at `/Users/ed/IdeaProjects/discount-engine-api`
-- ✅ Base URL: `http://localhost:8080/api/discounts`
+- ✅ Deployed to production web server
+- ✅ API URL configurable via POS Settings → API Configuration dialog
 - ✅ 4 REST endpoints: promotional, senior, veteran, coupon validation
-- ✅ Swagger UI available: `http://localhost:8080/swagger-ui/index.html`
-- ✅ Project naming:
+- ✅ Successfully tested with production deployment
+- ✅ Project details:
   - Group ID: `org.discountengine`
   - Artifact ID: `discount-engine-api`
   - Package: `org.discountengine.api`
@@ -620,22 +687,21 @@ These files contain essential information for Phase 3 integration work.
 - ✅ Light violet button styling for promotional items
 - ✅ Discount button added to Transaction Actions
 - ✅ Layout optimized (Current Sale 35%, Actions 65%)
-- ✅ 17 products marked as promotional
+- ✅ 12 promotional products (API-verified) + 36 regular products
+- ✅ 48 featured products randomized across 4 pages
 - ✅ All entities and DAOs updated
 - ✅ Build successful
 - ✅ Void Item button improved (no confirmation dialog)
+- ✅ API call optimization for instant regular item additions
 
-#### 3. Integration Planning
+#### 3. Integration Complete
 - ✅ All technology decisions finalized
-- ✅ Implementation plan created: `PHASE_3_IMPLEMENTATION_PLAN.md`
-- ✅ Database schema changes defined (add `item_type` column)
-- ✅ UI/UX approach finalized (dialog-based discount selection)
-- ✅ Error handling strategy defined
-- ✅ Incremental implementation approach (3A → 3B → 3C)
+- ✅ Database schema implemented (`transaction_discounts` table)
+- ✅ UI/UX fully implemented (dialog-based discount selection)
+- ✅ Error handling strategy implemented
+- ✅ Incremental implementation approach completed (3A → 3B → 3C)
 
 ### ✅ COMPLETED WORK
-
-**Follow the step-by-step plan in `phase_3_on_progress.md`**
 
 #### Phase 3A: Promotional Discounts ✅ COMPLETE
 - [x] Created PromotionalDiscountResponse DTO
@@ -648,7 +714,6 @@ These files contain essential information for Phase 3 integration work.
 - [x] **Promotional discounts display INLINE below items** (Receipt)
 - [x] Custom TableRow wrapper for mixed row types
 - [x] Custom rendering for discount rows (gray italic, 14pt)
-- [x] Created DISCOUNT_API_DATA_SYNC_PROMPT.md with UPC list
 - [x] Data sync resolved between POS and API
 - [x] All tests passing
 
@@ -679,11 +744,6 @@ These files contain essential information for Phase 3 integration work.
 - [x] Auto-recalculation as cart crosses minimum threshold
 - [x] Single scanner architecture (GlobalBarcodeScanner only)
 - [x] Test all 4 coupon codes (SAVE20, ITEM15OFF, MEMBER10, EXPIRED10)
-
-**Reference Documents:**
-- `phase_3_on_progress.md` - Current progress and detailed steps
-- `hand_off_for_phase_3.md` - API endpoints and integration details
-- `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
 
 ---
 
@@ -1252,16 +1312,21 @@ Total: $12.76
 
 ### ✅ 1. POS Database Changes (H2) - COMPLETE
 - ✅ Added `has_promotion` boolean column to `price_book` table
-- ✅ Marked 17 promotional items in price book (6 featured + 11 random)
+- ✅ Marked 12 promotional items in price book (working API promotions only)
+- ✅ Created 48 featured products (12 promotional + 36 regular) for Quick Keys
+- ✅ Randomized positions across 4 pages of Quick Keys grid
 - ✅ Updated all entities, DAOs, and seed data
+- ✅ Database reset scripts created (reset_database.sh, update_promotions.sql)
 
 ### ✅ 2. POS UI Updates - COMPLETE
 - ✅ Light violet button color for promotional items in Quick Keys
-- ✅ Discount button added to Transaction Actions zone (placeholder)
+- ✅ 48 featured products across 4 pages (12 promotional + 36 regular)
+- ✅ Discount button added to Transaction Actions zone (fully functional)
 - ✅ Current Sale width reduced from 42% to 35%
 - ✅ Transaction Actions now has 5 buttons with better readability
 - ✅ Custom `RoundedBorder` class for promotional buttons
 - ✅ Void Item button improved (no confirmation dialog)
+- ✅ Dialogs follow POS window location across multiple monitors
 
 ### ✅ 3. Spring Boot Discount Service - COMPLETE
 - ✅ Spring Boot 3.x project created at `/Users/ed/IdeaProjects/discount-engine-api`
@@ -1402,16 +1467,11 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - **ActionsPanel scanner**: DISABLED (no longer needed, eliminates conflicts)
 - **Benefits**: No duplicate queries, no conflicting error dialogs, cleaner codebase
 
-**Reference Documents:**
-- `phase_3_on_progress.md` - Implementation history and progress tracking
-- `hand_off_for_phase_3.md` - API endpoints, schemas, and integration details
-- `DISCOUNT_API_DATA_SYNC_PROMPT.md` - UPC list for discount-engine-api team
-- `COPY_PASTE_PROMPT.md` - This document (project context and decisions)
-
 **Discount Engine API:**
-- Running at: `http://localhost:8080/api/discounts`
-- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- Status: ✅ All 4 endpoints tested and working
+- ✅ Deployed to production web server
+- ✅ Configurable via POS Settings → API Configuration dialog
+- ✅ All 4 endpoints tested and working in production
+- ✅ Status: Production ready and operational
 
 ---
 
@@ -1438,6 +1498,247 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - ✅ Multi-POS journal viewer (Phase 2)
 - ✅ Transaction management (Phase 1)
 
-**Next Phase:**
-- Phase 1 deferred items (Lock Screen, Theme Modes) - if needed
+**Future Considerations:**
+- Authentication for Settings access (under discussion)
 - System is fully functional for production use!
+
+---
+
+## 🚀 FUTURE FEATURE IDEAS
+
+### ⭐ Priority Features (User Selected)
+
+#### 1. Return/Refund System ↩️ [HIGH PRIORITY]
+- **Purpose**: Essential for real retail operations
+- **Features**:
+  - Receipt lookup by transaction ID
+  - Partial or full refunds
+  - Reason codes (damaged, wrong item, customer changed mind, etc.)
+  - Refund journal separate from sales journal
+  - Optional inventory restock on refund
+  - Manager approval for large refunds (optional with authentication)
+- **Database Changes**: New `refund_transactions` table, link to original transaction
+- **Complexity**: Medium - new transaction type with reverse logic
+- **Business Impact**: High - required for professional retail operation
+
+#### 2. Receipt Options 📧 [HIGH PRIORITY]
+- **Purpose**: Modern convenience and eco-friendly
+- **Features**:
+  - Email receipt (customer enters email address)
+  - SMS receipt (customer enters phone number)
+  - QR code on printed receipt for digital copy
+  - Save receipt as PDF to local storage
+  - Receipt history lookup by email/phone
+- **Integration**: Email service (SMTP), SMS service (Twilio/similar)
+- **Complexity**: Medium - external service integration
+- **Business Impact**: Medium - customer satisfaction and modernization
+
+#### 3. Product Search Enhancement 🔍 [HIGH PRIORITY]
+- **Purpose**: Faster item lookup and better UX
+- **Features**:
+  - Search by category/brand/price range
+  - Voice search (speak product name)
+  - Recent items list (last 20 scanned)
+  - Favorites/frequently sold items
+  - Fuzzy matching (typo tolerance - "coke" finds "Coca Cola")
+  - Search history
+- **Database Changes**: Add `category`, `brand` columns to price_book
+- **Complexity**: Low to Medium
+- **Business Impact**: High - speeds up checkout significantly
+
+#### 4. Split Payment 💳💵 [HIGH PRIORITY]
+- **Purpose**: Common customer request
+- **Features**:
+  - Pay with multiple methods (part cash, part card)
+  - Split bill between multiple cards
+  - Visual breakdown of payments applied
+  - Remaining balance display
+  - Support up to 5 payment methods per transaction
+- **Database Changes**: `transaction_payments` table (multiple payment records per transaction)
+- **Complexity**: Medium - modify payment flow logic
+- **Business Impact**: Medium - customer convenience
+
+---
+
+### 💡 Other Recommended Features
+
+#### 5. Sales Analytics Dashboard 📊
+- **Purpose**: Real-time business insights
+- **Features**:
+  - Today's sales summary (total, transaction count, average sale)
+  - Best-selling products (top 10 items by quantity/revenue)
+  - Hourly sales chart (see peak hours)
+  - Discount usage statistics (how much given away)
+  - Revenue by payment method (cash vs card breakdown)
+  - Week/month/year comparisons
+- **Complexity**: Medium - data aggregation and charting
+- **Business Impact**: High - helps with inventory and staffing decisions
+
+#### 6. Customer-Facing Display 👀
+- **Purpose**: Modern customer experience
+- **Features**:
+  - Second window showing items being scanned
+  - Running total visible to customer
+  - Product images (if available)
+  - "Thank you" message after payment
+  - Promotional messages during idle
+- **Complexity**: Low - just another Swing window
+- **Business Impact**: Medium - transparency reduces disputes
+- **Note**: Works great with existing multi-POS socket architecture!
+
+#### 7. Low Stock Alerts 📦
+- **Purpose**: Prevent stockouts
+- **Features**:
+  - Track inventory levels during sales
+  - Alert when product hits minimum threshold
+  - "Almost Out" badge on Quick Keys buttons
+  - Daily low stock report
+  - Auto-generate reorder list
+- **Database Changes**: Add `quantity_on_hand`, `min_quantity` to price_book
+- **Complexity**: Low - increment/decrement on sales
+- **Business Impact**: High - better inventory management
+
+#### 8. End-of-Day Report 📝
+- **Purpose**: Required for cash reconciliation
+- **Features**:
+  - Total sales by payment method
+  - Expected cash drawer amount
+  - Transaction count (including voids)
+  - Voided items summary
+  - Discount breakdown (promo/senior/veteran/coupon totals)
+  - Tax collected
+  - Print or export to PDF
+- **Complexity**: Low - parse transaction journal
+- **Business Impact**: High - accounting accuracy and compliance
+
+#### 9. Transaction History Viewer 📜
+- **Purpose**: Customer service and dispute resolution
+- **Features**:
+  - Search past transactions by date, amount, items
+  - Search by transaction ID or receipt number
+  - View detailed receipt
+  - Reprint receipt
+  - Link to refund processing
+  - Export to CSV
+- **Complexity**: Low - read existing transaction journal
+- **Business Impact**: Medium - resolve customer issues quickly
+
+#### 10. Offline Mode 🔌
+- **Purpose**: Network reliability and business continuity
+- **Features**:
+  - Queue transactions when discount API is down
+  - Continue operating without discounts (with warning)
+  - Sync queued discounts when connection restored
+  - Visual indicator of offline status (red banner)
+  - Fallback to cached discount rules
+- **Complexity**: Medium - transaction queue system
+- **Business Impact**: High - prevents lost sales during outages
+
+#### 11. Product Images 🖼️
+- **Purpose**: Visual confirmation
+- **Features**:
+  - Show product photo in Current Sale panel
+  - Customer display shows images
+  - Visual confirmation of scanned item
+  - Thumbnail grid in Quick Keys
+- **Database Changes**: Add `image_path` column to price_book
+- **Complexity**: Low - image display in Swing
+- **Business Impact**: Low - nice-to-have polish
+
+#### 12. Hot Keys/Keyboard Shortcuts ⌨️
+- **Purpose**: Speed up power users
+- **Features**:
+  - F1-F12 for common actions
+  - Ctrl+Q for Change Qty
+  - Ctrl+V for Void Item
+  - Ctrl+D for Discount
+  - Ctrl+T for Total
+  - Customizable key bindings
+- **Complexity**: Low - add KeyListener mappings
+- **Business Impact**: Medium - faster for experienced cashiers
+
+#### 13. Mini Receipt Printer Support 🖨️
+- **Purpose**: Professional retail printing
+- **Features**:
+  - Integrate with thermal printers (Epson, Star, etc.)
+  - Auto-print on payment
+  - Print logo/header
+  - Kitchen order printing (if food/beverage)
+  - Configurable printer selection
+- **Complexity**: Medium - hardware integration
+- **Business Impact**: High - professional appearance
+
+#### 14. Sound Effects 🔊
+- **Purpose**: Audio feedback
+- **Features**:
+  - Scan beep (success/error sounds)
+  - Payment confirmation chime
+  - Low stock alert sound
+  - Error buzz
+  - Customizable sound pack
+- **Complexity**: Low - Java audio playback
+- **Business Impact**: Low - UX polish
+
+#### 15. Idle Screen Saver/Attract Mode 🎬
+- **Purpose**: Marketing and security
+- **Features**:
+  - Show promotional offers when idle
+  - Product highlights carousel
+  - Daily specials
+  - Auto-lock after X minutes (with authentication)
+- **Complexity**: Low - timer + carousel display
+- **Business Impact**: Low - marketing opportunity
+- **Note**: Git history shows "working carousel with trigger upon idle" already exists!
+
+---
+
+### 🏆 Recommended Implementation Order
+
+**Phase 4A - Core Operations** (Essential):
+1. Return/Refund System (⭐ selected)
+2. End-of-Day Report
+3. Transaction History Viewer
+
+**Phase 4B - Customer Experience** (High Value):
+4. Split Payment (⭐ selected)
+5. Receipt Options (⭐ selected)
+6. Product Search Enhancement (⭐ selected)
+
+**Phase 4C - Business Intelligence** (Analytics):
+7. Sales Analytics Dashboard
+8. Low Stock Alerts
+
+**Phase 4D - Polish & Advanced** (Nice-to-Have):
+9. Customer-Facing Display
+10. Offline Mode
+11. Thermal Printer Support
+12. Hot Keys/Keyboard Shortcuts
+
+---
+
+### 📝 Implementation Notes
+
+- **Quick Wins** (Low effort, high value):
+  - Transaction History Viewer (parse existing journals)
+  - Low Stock Alerts (one column to database)
+  - End-of-Day Report (analyze transaction log)
+  - Product Search by Category (filter existing data)
+
+- **Database Schema Planning**:
+  - `refund_transactions` table for returns
+  - `transaction_payments` table for split payments
+  - Add `category`, `brand`, `image_path`, `quantity_on_hand`, `min_quantity` to `price_book`
+  - `customer_receipts` table for email/SMS receipt tracking
+
+- **External Integrations Needed**:
+  - Email service (SMTP or SendGrid/Mailgun)
+  - SMS service (Twilio or similar)
+  - Thermal printer drivers (JavaPOS or manufacturer SDKs)
+
+---
+
+**User's Selected Priorities for Phase 4:**
+- ⭐ Return/Refund System
+- ⭐ Receipt Options
+- ⭐ Product Search Enhancement
+- ⭐ Split Payment

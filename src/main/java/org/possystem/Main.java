@@ -33,7 +33,7 @@ public class Main {
 
             // Show lock screen carousel first
             System.out.println("Creating lock screen carousel...");
-            lockScreenRef[0] = new LockScreenCarousel(() -> {
+            lockScreenRef[0] = new LockScreenCarousel(null, () -> {
                 // When user clicks to unlock
                 System.out.println("Lock screen clicked - unlocking...");
 

@@ -695,7 +695,7 @@ public class ActionsPanel extends JPanel {
         int dialogWidth = Math.min(450, screenSize.width - 100);
         int dialogHeight = Math.min(600, screenSize.height - 100);
         inputDialog.setSize(dialogWidth, dialogHeight);
-        inputDialog.setLocationRelativeTo(null); // Center on screen
+        inputDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this)); // Center on parent window
         inputDialog.setLayout(new BorderLayout(10, 10));
 
         // Main panel
@@ -981,7 +981,7 @@ public class ActionsPanel extends JPanel {
         int dialogWidth = Math.min(400, screenSize.width - 100);
         int dialogHeight = Math.min(350, screenSize.height - 100);
         cashDialog.setSize(dialogWidth, dialogHeight);
-        cashDialog.setLocationRelativeTo(null); // Center on screen
+        cashDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this)); // Center on parent window
 
         // Main panel
         JPanel mainPanel = new JPanel(new BorderLayout(15, 15));
@@ -1159,7 +1159,7 @@ public class ActionsPanel extends JPanel {
         receiptDialog.setUndecorated(true);
         receiptDialog.setResizable(false);
         receiptDialog.setSize(dialogWidth, dialogHeight);
-        receiptDialog.setLocationRelativeTo(null); // Center on screen
+        receiptDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this)); // Center on parent window
 
         // Main panel with minimal spacing
         JPanel mainPanel = new JPanel(new BorderLayout(0, 0));

@@ -132,6 +132,10 @@ public class TransactionService implements PosEventDispatcher {
     }
 
     public void addItem(String upc, String name, double unitPrice) throws SQLException {
+        // Check if this item is promotional
+        PriceBook priceBookItem = priceBookDao.findByUpc(upc).orElse(null);
+        boolean isPromotionalItem = priceBookItem != null && priceBookItem.hasPromotion();
+
         // Check if item already exists in current transaction
         TransactionItem existingItem = transactionItemDao.findActiveItemByUpc(currentTransactionId, upc);
 
@@ -193,11 +197,21 @@ public class TransactionService implements PosEventDispatcher {
         // Recalculate active percentage-based discounts
         recalculateActiveDiscounts();
 
-        // Check and apply promotional discounts
-        checkAndApplyPromotionalDiscounts();
+        // OPTIMIZATION: Only call promotional discount API if this item is promotional
+        if (isPromotionalItem) {
+            System.out.println("OPTIMIZATION: Item is promotional, checking discount for UPC: " + upc);
+            checkAndApplyPromotionalDiscount(upc); // Check only this specific item
+        } else {
+            System.out.println("OPTIMIZATION: Item is not promotional, skipping promotional discount check");
+        }
 
-        // Recalculate coupon discounts based on new cart total
-        recalculateCouponDiscounts();
+        // OPTIMIZATION: Only recalculate coupons if coupons exist in cart
+        if (hasActiveCoupons()) {
+            System.out.println("OPTIMIZATION: Active coupons found, recalculating");
+            recalculateCouponDiscounts();
+        } else {
+            System.out.println("OPTIMIZATION: No active coupons, skipping coupon recalculation");
+        }
     }
 
     public void voidItem(int itemId) throws SQLException {
@@ -225,11 +239,21 @@ public class TransactionService implements PosEventDispatcher {
         // Recalculate active percentage-based discounts
         recalculateActiveDiscounts();
 
-        // Check and apply promotional discounts
-        checkAndApplyPromotionalDiscounts();
+        // OPTIMIZATION: Check if there are any promotional items remaining in cart
+        if (hasPromotionalItems()) {
+            System.out.println("OPTIMIZATION: Promotional items found after void, recalculating all promotional discounts");
+            checkAndApplyPromotionalDiscounts();
+        } else {
+            System.out.println("OPTIMIZATION: No promotional items in cart, skipping promotional discount check");
+        }
 
-        // Recalculate coupon discounts based on new cart total
-        recalculateCouponDiscounts();
+        // OPTIMIZATION: Only recalculate coupons if coupons exist
+        if (hasActiveCoupons()) {
+            System.out.println("OPTIMIZATION: Active coupons found after void, recalculating");
+            recalculateCouponDiscounts();
+        } else {
+            System.out.println("OPTIMIZATION: No active coupons after void, skipping coupon recalculation");
+        }
     }
 
     public void voidTransaction() throws SQLException {
@@ -254,6 +278,13 @@ public class TransactionService implements PosEventDispatcher {
                 .findFirst()
                 .orElse(null);
 
+        // Check if this item is promotional
+        boolean isPromotionalItem = false;
+        if (oldItem != null) {
+            PriceBook priceBookItem = priceBookDao.findByUpc(oldItem.upc()).orElse(null);
+            isPromotionalItem = priceBookItem != null && priceBookItem.hasPromotion();
+        }
+
         double subtotal = quantity * unitPrice;
         transactionItemDao.updateQuantity(itemId, quantity, subtotal);
 
@@ -269,11 +300,21 @@ public class TransactionService implements PosEventDispatcher {
         // Recalculate active percentage-based discounts
         recalculateActiveDiscounts();
 
-        // Check and apply promotional discounts
-        checkAndApplyPromotionalDiscounts();
+        // OPTIMIZATION: Only recalculate promotional discount for this specific item if it's promotional
+        if (isPromotionalItem && oldItem != null) {
+            System.out.println("OPTIMIZATION: Item is promotional, checking discount for UPC: " + oldItem.upc());
+            checkAndApplyPromotionalDiscount(oldItem.upc());
+        } else {
+            System.out.println("OPTIMIZATION: Item is not promotional, skipping promotional discount check");
+        }
 
-        // Recalculate coupon discounts based on new cart total
-        recalculateCouponDiscounts();
+        // OPTIMIZATION: Only recalculate coupons if coupons exist
+        if (hasActiveCoupons()) {
+            System.out.println("OPTIMIZATION: Active coupons found, recalculating");
+            recalculateCouponDiscounts();
+        } else {
+            System.out.println("OPTIMIZATION: No active coupons, skipping coupon recalculation");
+        }
     }
 
     public void totalTransaction() throws SQLException {
@@ -389,11 +430,21 @@ public class TransactionService implements PosEventDispatcher {
         // Recalculate active percentage-based discounts
         recalculateActiveDiscounts();
 
-        // Check and apply promotional discounts
-        checkAndApplyPromotionalDiscounts();
+        // OPTIMIZATION: Check if there are any promotional items remaining in cart
+        if (hasPromotionalItems()) {
+            System.out.println("OPTIMIZATION: Promotional items found after bulk delete, recalculating all promotional discounts");
+            checkAndApplyPromotionalDiscounts();
+        } else {
+            System.out.println("OPTIMIZATION: No promotional items in cart, skipping promotional discount check");
+        }
 
-        // Recalculate coupon discounts based on new cart total
-        recalculateCouponDiscounts();
+        // OPTIMIZATION: Only recalculate coupons if coupons exist
+        if (hasActiveCoupons()) {
+            System.out.println("OPTIMIZATION: Active coupons found after bulk delete, recalculating");
+            recalculateCouponDiscounts();
+        } else {
+            System.out.println("OPTIMIZATION: No active coupons after bulk delete, skipping coupon recalculation");
+        }
     }
 
     public double getTransactionSubtotal() throws SQLException {
@@ -876,8 +927,164 @@ public class TransactionService implements PosEventDispatcher {
     }
 
     /**
+     * Check if there are any active coupons in the current transaction.
+     * Used to optimize API calls - skip coupon recalculation if no coupons exist.
+     */
+    private boolean hasActiveCoupons() throws SQLException {
+        if (currentTransactionId == -1) {
+            return false;
+        }
+        List<TransactionDiscount> discounts = transactionDiscountDao.findActiveByTransactionId(currentTransactionId);
+        return discounts.stream().anyMatch(d -> "COUPON".equals(d.discountType()));
+    }
+
+    /**
+     * Check if there are any promotional items in the current transaction.
+     * Used to optimize API calls - skip promotional discount check if no promotional items exist.
+     */
+    private boolean hasPromotionalItems() throws SQLException {
+        if (currentTransactionId == -1) {
+            return false;
+        }
+        List<TransactionItem> items = transactionItemDao.findByTransactionId(currentTransactionId);
+        for (TransactionItem item : items) {
+            if ("ACTIVE".equals(item.status())) {
+                PriceBook priceBookItem = priceBookDao.findByUpc(item.upc()).orElse(null);
+                if (priceBookItem != null && priceBookItem.hasPromotion()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check and apply promotional discount for a SPECIFIC item (optimization).
+     * Only calls the API for the given UPC, avoiding unnecessary checks of other items.
+     * Called when adding a promotional item to the cart.
+     */
+    private void checkAndApplyPromotionalDiscount(String upc) throws SQLException {
+        if (currentTransactionId == -1 || discountApiClient == null) {
+            System.out.println("DEBUG: checkAndApplyPromotionalDiscount - No transaction or API client");
+            return;
+        }
+
+        // Get the item from the cart
+        List<TransactionItem> items = transactionItemDao.findByTransactionId(currentTransactionId);
+        TransactionItem item = items.stream()
+                .filter(i -> i.upc().equals(upc) && i.status().equals("ACTIVE"))
+                .findFirst()
+                .orElse(null);
+
+        if (item == null) {
+            System.out.println("DEBUG: Item " + upc + " not found in cart");
+            return;
+        }
+
+        // Check if item is promotional
+        try {
+            PriceBook priceBookItem = priceBookDao.findByUpc(item.upc()).orElse(null);
+            if (priceBookItem == null || !priceBookItem.hasPromotion()) {
+                return; // Not promotional
+            }
+
+            System.out.println("DEBUG: Checking promotional discount for UPC=" + item.upc() + ", qty=" + item.quantity());
+
+            // Call API to check for promotional discount
+            PromotionalDiscountResponse response = discountApiClient.calculatePromotionalDiscount(
+                item.upc(),
+                item.quantity(),
+                item.unitPrice()
+            );
+
+            System.out.println("DEBUG: API Response - triggered=" + response.triggered() +
+                               ", discountAmount=" + response.discountAmount());
+
+            String promoKey = item.upc();
+
+            // Check if discount triggered
+            if (response.triggered()) {
+                // Check if we already have this discount in the database
+                List<TransactionDiscount> existingDiscounts = transactionDiscountDao.findActiveByTransactionId(currentTransactionId);
+                TransactionDiscount existingPromo = existingDiscounts.stream()
+                    .filter(d -> d.discountType().equals("PROMOTIONAL") && d.itemId() != null && d.itemId() == item.id())
+                    .findFirst()
+                    .orElse(null);
+
+                boolean isFirstTrigger = !triggeredPromotions.contains(promoKey);
+
+                if (existingPromo == null) {
+                    // Create new promotional discount
+                    TransactionDiscount discount = new TransactionDiscount(
+                        0,
+                        currentTransactionId,
+                        "PROMOTIONAL",
+                        -response.discountAmount(),
+                        item.id(),
+                        "ACTIVE",
+                        null
+                    );
+
+                    int discountId = transactionDiscountDao.insert(discount);
+
+                    // Log discount application
+                    String details = String.format("TX_ID:%d|DISCOUNT_ID:%d|TYPE:PROMOTIONAL|ITEM_ID:%d|UPC:%s|PROMO:%s|AMOUNT:%.2f",
+                        currentTransactionId, discountId, item.id(), item.upc(), response.promotionType(), response.discountAmount());
+                    logJournal("DISCOUNT_APPLY", details);
+
+                    // Show toast only on first trigger
+                    if (isFirstTrigger && toastCallback != null) {
+                        String title = response.description();
+                        String message = String.format("%s - You saved $%.2f", item.name(), response.discountAmount());
+                        toastCallback.showToast(title, message);
+                        triggeredPromotions.add(promoKey);
+                    }
+                } else {
+                    // Update existing discount if amount changed
+                    double oldAmount = existingPromo.discountAmount();
+                    double newAmount = -response.discountAmount();
+
+                    if (Math.abs(oldAmount - newAmount) > 0.001) {
+                        transactionDiscountDao.updateDiscountAmount(existingPromo.id(), newAmount);
+
+                        // Log recalculation
+                        String details = String.format("TX_ID:%d|DISCOUNT_ID:%d|TYPE:PROMOTIONAL|ITEM_ID:%d|UPC:%s|OLD_AMOUNT:%.2f|NEW_AMOUNT:%.2f",
+                            currentTransactionId, existingPromo.id(), item.id(), item.upc(), oldAmount, newAmount);
+                        logJournal("DISCOUNT_RECALC", details);
+                    }
+
+                    triggeredPromotions.add(promoKey);
+                }
+            } else {
+                // Discount no longer triggered - remove if exists
+                List<TransactionDiscount> existingDiscounts = transactionDiscountDao.findActiveByTransactionId(currentTransactionId);
+                TransactionDiscount existingPromo = existingDiscounts.stream()
+                    .filter(d -> d.discountType().equals("PROMOTIONAL") && d.itemId() != null && d.itemId() == item.id())
+                    .findFirst()
+                    .orElse(null);
+
+                if (existingPromo != null) {
+                    transactionDiscountDao.deleteById(existingPromo.id());
+
+                    // Log removal
+                    String details = String.format("TX_ID:%d|DISCOUNT_ID:%d|TYPE:PROMOTIONAL|ITEM_ID:%d|UPC:%s|REASON:threshold_not_met",
+                        currentTransactionId, existingPromo.id(), item.id(), item.upc());
+                    logJournal("DISCOUNT_REMOVE", details);
+
+                    triggeredPromotions.remove(promoKey);
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("DEBUG ERROR: Failed to check promotional discount for item " + item.upc() + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
      * Check and apply promotional discounts for all promotional items in the cart.
-     * Called automatically after addItem, voidItem, updateQuantity, deleteSelectedItems.
+     * Called automatically after voidItem, updateQuantity, deleteSelectedItems.
+     * For addItem, use checkAndApplyPromotionalDiscount(upc) instead for better performance.
      */
     public void checkAndApplyPromotionalDiscounts() throws SQLException {
         if (currentTransactionId == -1 || discountApiClient == null) {
@@ -1034,6 +1241,19 @@ public class TransactionService implements PosEventDispatcher {
         List<TransactionItem> cartItems = getCurrentSaleItems();
         double cartSubtotal = getTransactionSubtotal();
 
+        System.out.println("=== RECALCULATE COUPON DISCOUNTS ===");
+        System.out.println("Current cart subtotal: $" + String.format("%.2f", cartSubtotal));
+        System.out.println("Active cart items: " + cartItems.size());
+
+        // Check if cart is effectively empty (all items voided or no items)
+        boolean isEmptyCart = cartItems.stream().noneMatch(item -> "ACTIVE".equals(item.status()));
+        if (isEmptyCart) {
+            System.out.println("Cart is empty (all items voided) - Using dummy data for validation");
+            // Create dummy cart item for validation (API requires non-empty cart)
+            cartItems = List.of(new TransactionItem(0, 0, "000000000000", "Validation", 1, 0.01, 0.01, "ACTIVE"));
+            cartSubtotal = 0.01;
+        }
+
         // Recalculate each coupon
         for (TransactionDiscount couponDiscount : couponDiscounts) {
             String couponCode = pendingCouponCodes.get(couponDiscount.id());
@@ -1042,29 +1262,40 @@ public class TransactionService implements PosEventDispatcher {
             }
 
             try {
+                System.out.println("Validating coupon: " + couponCode);
                 CouponValidationResponse response = discountApiClient.validateCoupon(
                     couponCode,
                     cartItems,
                     cartSubtotal
                 );
 
+                System.out.println("  API Response - Valid: " + response.valid() + ", Triggered: " + response.triggered());
+                System.out.println("  Current discount in DB: $" + String.format("%.2f", couponDiscount.discountAmount()));
+
                 // Update discount amount based on current validation
-                // Always use the API's discount amount if coupon is valid (even if not triggered)
+                // Only apply discount if coupon is both valid AND triggered
                 double newAmount = 0.0;
-                if (response.valid() && response.discountAmount() != null) {
+                if (response.valid() && response.triggered() && response.discountAmount() != null) {
                     newAmount = -response.discountAmount();
+                    System.out.println("  Coupon IS triggered - Setting amount to: $" + String.format("%.2f", newAmount));
+                } else {
+                    System.out.println("  Coupon NOT triggered - Setting amount to: $0.00");
                 }
 
                 if (Math.abs(newAmount - couponDiscount.discountAmount()) > 0.01) {
+                    System.out.println("  UPDATING database from $" + String.format("%.2f", couponDiscount.discountAmount()) +
+                                     " to $" + String.format("%.2f", newAmount));
                     transactionDiscountDao.updateDiscountAmount(couponDiscount.id(), newAmount);
                     String status = response.triggered() ? "triggered" : "pending";
-                    System.out.println("Recalculated coupon " + couponCode + " (" + status + "): $" +
-                        String.format("%.2f", Math.abs(newAmount)));
+                    System.out.println("  SUCCESS: Recalculated coupon " + couponCode + " (" + status + ")");
+                } else {
+                    System.out.println("  No update needed (amount unchanged)");
                 }
 
             } catch (Exception e) {
                 // Silent error - just log it, don't interrupt cart operations
                 System.err.println("Failed to recalculate coupon " + couponCode + ": " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
