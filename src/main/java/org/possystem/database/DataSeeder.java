@@ -1,5 +1,7 @@
 package org.possystem.database;
 
+import org.possystem.dao.UserDao;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -14,6 +16,11 @@ import java.sql.*;
 public class DataSeeder {
 
     public static void seed() throws SQLException {
+        seedPriceBook();
+        seedUsers();
+    }
+
+    private static void seedPriceBook() throws SQLException {
         Connection conn = DatabaseManager.getConnection();
 
         Statement checkStmt = conn.createStatement();
@@ -103,5 +110,24 @@ public class DataSeeder {
         if (skippedCount > 0) {
             System.out.println("Warning: " + skippedCount + " lines were skipped due to formatting errors.");
         }
+    }
+
+    private static void seedUsers() throws SQLException {
+        Connection conn = DatabaseManager.getConnection();
+
+        Statement checkStmt = conn.createStatement();
+        ResultSet rs = checkStmt.executeQuery("SELECT COUNT(*) FROM users");
+        rs.next();
+        int count = rs.getInt(1);
+
+        if (count > 0) {
+            System.out.println("Users already populated, skipping seed.");
+            return;
+        }
+
+        // Create default admin user
+        UserDao userDao = new UserDao();
+        userDao.insert("admin", "admin", "MANAGER");
+        System.out.println("Default admin user created (username: admin, password: admin)");
     }
 }

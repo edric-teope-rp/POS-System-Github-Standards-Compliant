@@ -22,6 +22,7 @@ public class SocketConfigDialog extends JDialog {
 
     private final Frame parentFrame;
     private final SocketService socketService;
+    private final org.possystem.service.AuthService authService;
 
     // Dynamic font scaling based on screen resolution
     private final float fontScale;
@@ -67,10 +68,11 @@ public class SocketConfigDialog extends JDialog {
             new Color(220, 20, 60)    // Red
     };
 
-    public SocketConfigDialog(Frame parent, SocketService socketService) {
+    public SocketConfigDialog(Frame parent, SocketService socketService, org.possystem.service.AuthService authService) {
         super(parent, "Socket Configuration", Dialog.ModalityType.MODELESS);
         this.parentFrame = parent;
         this.socketService = socketService;
+        this.authService = authService;
 
         // Calculate font scaling based on screen resolution
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
@@ -145,11 +147,31 @@ public class SocketConfigDialog extends JDialog {
         headerPanel.setBackground(new Color(70, 130, 180));  // Steel blue
         headerPanel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
 
-        // Title label
-        JLabel headerLabel = new JLabel("Socket Configuration");
+        // Title label with username
+        String username = authService.getCurrentUsername();
+        String titleText = "Socket Configuration - Logged in as: " + (username != null ? username : "Unknown");
+        JLabel headerLabel = new JLabel(titleText);
         headerLabel.setFont(new Font("Arial", Font.BOLD, headerFontSize));
         headerLabel.setForeground(Color.WHITE);
         headerPanel.add(headerLabel, BorderLayout.CENTER);
+
+        // Right panel for logout and close buttons
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        rightPanel.setBackground(new Color(70, 130, 180));
+
+        // Logout button
+        JButton logoutButton = new JButton("Logout");
+        logoutButton.setFont(new Font("Arial", Font.BOLD, Math.round(12 * fontScale)));
+        logoutButton.setBackground(new Color(220, 53, 69)); // Red
+        logoutButton.setForeground(Color.WHITE);
+        logoutButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        logoutButton.setPreferredSize(new Dimension(Math.round(110 * fontScale), Math.round(35 * fontScale)));
+        applyRoundedStyleWithBlackOutline(logoutButton);
+        logoutButton.addActionListener(e -> {
+            authService.logout();
+            dispose();
+        });
+        rightPanel.add(logoutButton);
 
         // Close button (X) with custom icon
         JButton closeButton = new JButton() {
@@ -199,7 +221,9 @@ public class SocketConfigDialog extends JDialog {
                 e.getComponent().repaint();
             }
         });
-        headerPanel.add(closeButton, BorderLayout.EAST);
+        rightPanel.add(closeButton);
+
+        headerPanel.add(rightPanel, BorderLayout.EAST);
 
         // Add mouse drag functionality to header
         final java.awt.Point[] mouseDownCompCoords = {null};
@@ -1143,6 +1167,63 @@ public class SocketConfigDialog extends JDialog {
 
                 // Draw darker outline border (like search engine keyboard)
                 g2d.setColor(displayColor.darker());
+                g2d.setStroke(new BasicStroke(2f));
+                g2d.drawRoundRect(0, 0, btn.getWidth() - 1, btn.getHeight() - 1, arcSize, arcSize);
+
+                // Draw button text
+                String text = btn.getText();
+                FontMetrics fm = g2d.getFontMetrics(btn.getFont());
+                int textWidth = fm.stringWidth(text);
+                int x = (btn.getWidth() - textWidth) / 2;
+                int y = (btn.getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+
+                g2d.setFont(btn.getFont());
+                g2d.setColor(textColor);
+                g2d.drawString(text, x, y);
+
+                g2d.dispose();
+            }
+        });
+    }
+
+    private void applyRoundedStyleWithBlackOutline(JButton button) {
+        button.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setOpaque(false);
+
+        button.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
+            @Override
+            public void paint(Graphics g, JComponent c) {
+                JButton btn = (JButton) c;
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+                int arcSize = 12;
+
+                Color buttonColor = btn.getBackground();
+                Color displayColor;
+                Color textColor;
+
+                if (btn.isEnabled()) {
+                    displayColor = buttonColor;
+                    textColor = btn.getForeground();
+                } else {
+                    displayColor = new Color(
+                        (int)(buttonColor.getRed() * 0.5),
+                        (int)(buttonColor.getGreen() * 0.5),
+                        (int)(buttonColor.getBlue() * 0.5)
+                    );
+                    textColor = new Color(180, 180, 180);
+                }
+
+                // Fill button background
+                g2d.setColor(displayColor);
+                g2d.fillRoundRect(0, 0, btn.getWidth() - 1, btn.getHeight() - 1, arcSize, arcSize);
+
+                // Draw black outline border
+                g2d.setColor(Color.BLACK);
                 g2d.setStroke(new BasicStroke(2f));
                 g2d.drawRoundRect(0, 0, btn.getWidth() - 1, btn.getHeight() - 1, arcSize, arcSize);
 

@@ -1,6 +1,7 @@
 package org.possystem.ui;
 
 import org.possystem.config.ConfigManager;
+import org.possystem.service.AuthService;
 import org.possystem.service.PriceBookService;
 import org.possystem.service.TransactionService;
 import org.possystem.service.DiscountApiClient;
@@ -19,6 +20,7 @@ public class PosInterface extends JFrame {
 
     // Services
     private final ConfigManager configManager;
+    private final AuthService authService;
     private final PriceBookService priceBookService;
     private final TransactionService transactionService;
     private final DiscountApiClient discountApiClient;
@@ -41,6 +43,7 @@ public class PosInterface extends JFrame {
 
     public PosInterface() {
         this.configManager = new ConfigManager();
+        this.authService = new AuthService();
         this.priceBookService = new PriceBookService();
         this.transactionService = new TransactionService();
         this.discountApiClient = new DiscountApiClient(configManager.getDiscountApiUrl());
@@ -1036,10 +1039,26 @@ public class PosInterface extends JFrame {
     }
 
     private void showSocketConfigDialog() {
+        // Check authentication
+        if (!authService.checkAuthAndRefresh()) {
+            // Disable barcode scanner while login dialog is open
+            globalScanner.disableForDialog();
+
+            // Show login dialog
+            LoginDialog loginDialog = new LoginDialog(this, authService);
+            boolean loginSuccess = loginDialog.showLoginDialog();
+
+            if (!loginSuccess) {
+                // Re-enable scanner if login was cancelled
+                globalScanner.enable();
+                return; // User cancelled login
+            }
+        }
+
         // Disable barcode scanner while socket config dialog is open
         globalScanner.disableForDialog();
 
-        SocketConfigDialog dialog = new SocketConfigDialog(this, socketService);
+        SocketConfigDialog dialog = new SocketConfigDialog(this, socketService, authService);
 
         // Re-enable scanner when dialog closes
         dialog.addWindowListener(new java.awt.event.WindowAdapter() {
@@ -1053,10 +1072,26 @@ public class PosInterface extends JFrame {
     }
 
     private void showApiConfigDialog() {
+        // Check authentication
+        if (!authService.checkAuthAndRefresh()) {
+            // Disable barcode scanner while login dialog is open
+            globalScanner.disableForDialog();
+
+            // Show login dialog
+            LoginDialog loginDialog = new LoginDialog(this, authService);
+            boolean loginSuccess = loginDialog.showLoginDialog();
+
+            if (!loginSuccess) {
+                // Re-enable scanner if login was cancelled
+                globalScanner.enable();
+                return; // User cancelled login
+            }
+        }
+
         // Disable barcode scanner while API config dialog is open
         globalScanner.disableForDialog();
 
-        ApiConfigDialog dialog = new ApiConfigDialog(this, configManager, discountApiClient);
+        ApiConfigDialog dialog = new ApiConfigDialog(this, configManager, discountApiClient, authService);
 
         // Re-enable scanner when dialog closes
         dialog.addWindowListener(new java.awt.event.WindowAdapter() {
@@ -1630,11 +1665,27 @@ public class PosInterface extends JFrame {
 
         // Add global mouse listener to detect activity
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            // Exclude LoginDialog from idle detection
+            if (event.getSource() instanceof Component) {
+                Component source = (Component) event.getSource();
+                Window window = SwingUtilities.getWindowAncestor(source);
+                if (window instanceof LoginDialog) {
+                    return; // Don't reset timer for LoginDialog events
+                }
+            }
             resetIdleTimer();
         }, AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
 
         // Add global keyboard listener to detect activity
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            // Exclude LoginDialog from idle detection
+            if (event.getSource() instanceof Component) {
+                Component source = (Component) event.getSource();
+                Window window = SwingUtilities.getWindowAncestor(source);
+                if (window instanceof LoginDialog) {
+                    return; // Don't reset timer for LoginDialog events
+                }
+            }
             resetIdleTimer();
         }, AWTEvent.KEY_EVENT_MASK);
     }
