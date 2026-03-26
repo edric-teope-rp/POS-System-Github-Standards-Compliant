@@ -26,12 +26,17 @@ All phases complete and deployed to production! The discount engine API has been
 
 ### PHASE 1: Standalone POS System ✅ COMPLETE
 
-#### Component 1: Authentication/Lock Screen
-- **Status**: 🤔 UNDER CONSIDERATION
-- **Potential Scope**: PIN-based authentication for accessing Settings dialogs
-  - API Configuration access protection
-  - Socket Configuration access protection
-- **Note**: Subject for discussion - implementation approach to be determined
+#### Component 1: Authentication/Lock Screen ✅ COMPLETE
+- **Status**: ✅ PRODUCTION READY
+- **Implementation**: Username/password authentication for accessing Settings dialogs
+  - API Configuration access protection (requires login)
+  - Socket Configuration access protection (requires login)
+  - 2-minute session timeout with activity refresh
+  - SHA-256 password hashing
+  - Default admin user (username: admin, password: admin)
+  - Logout buttons in config dialogs
+  - LoginDialog with on-screen keyboard support
+  - Physical keyboard input fully functional
 
 #### Component 2: POS Interface ✅ COMPLETE + POLISHED
 - Main transaction interface (Quick Keys, Current Sale, Actions zones)
@@ -111,6 +116,61 @@ All phases complete and deployed to production! The discount engine API has been
 ---
 
 ## RECENT WORK COMPLETED (Latest Session)
+
+### v4.0 - Authentication System & UI Polish (2026-03-25) ✅
+
+#### Authentication System - PRODUCTION READY ✅
+
+✅ **Complete Authentication Implementation:**
+- Created `User.java` entity (Java record with SHA-256 password hashing)
+- Created `UserDao.java` with password verification methods
+- Created `AuthService.java` with 2-minute session timeout management
+- Created `LoginDialog.java` with full UI and keyboard support
+- Updated `DatabaseManager.java` to include users table
+- Updated `DataSeeder.java` to seed default admin user (username: admin, password: admin)
+- Integrated authentication into `ApiConfigDialog.java` and `SocketConfigDialog.java`
+- Added Logout buttons (red, rounded with black outline) to both config dialogs
+
+✅ **LoginDialog Features:**
+- Modal authentication dialog with upper center positioning (15% from top)
+- Horizontal layout: labels on left, input fields maximize full width
+- Double-click activation for on-screen keyboard
+- Physical keyboard input fully functional
+- Simplified lowercase-only keyboard (no shift/uppercase)
+- Colored special keys with rounded style and darker outline:
+  - Backspace (←): Amber #FFC107
+  - Clear: Red #DC3545
+  - Enter: Green #28A745
+- Cancel and Login buttons with rounded corners and black outline
+- Dialog height optimized (reduced from 400 to 300)
+- GlobalBarcodeScanner properly disabled before showing dialog
+
+✅ **Session Management:**
+- 2-minute session timeout with activity refresh
+- `checkAuthAndRefresh()` method for automatic session validation
+- Logout functionality with session cleanup
+- Username display in config dialog headers
+
+✅ **Database Schema:**
+- `users` table with SHA-256 password hashing
+- Default admin user seeded on first run
+- Proper foreign key relationships maintained
+
+✅ **Security Fixes:**
+- Fixed keyboard input capturing by GlobalBarcodeScanner
+- Proper dialog exclusion from global listeners
+- Session expiration handling
+
+#### Data Fixes ✅
+
+✅ **Pricebook Cleanup:**
+- Removed duplicate "CIR K POLAR POP LARG" entry (line 713, UPC: 028400726580)
+- Kept original entry at quick_key_position 1 (UPC: 041594899038)
+- DataSeeder automatically reflects changes on database reset
+
+**Status:** Authentication system fully implemented and production ready! 🔐
+
+---
 
 ### v3.5 - Performance Optimization & Promotional Products Enhancement (2026-03-25) ✅
 
@@ -446,15 +506,18 @@ Void item → Only recalculate if promotional items/coupons remain
 - **Main entry**: `src/main/java/org/possystem/Main.java`
 - **Transaction logic**: `src/main/java/org/possystem/service/TransactionService.java`
 - **Price book**: `src/main/java/org/possystem/service/PriceBookService.java`
-- **Discount API client**: `src/main/java/org/possystem/service/DiscountApiClient.java` ✨ NEW
+- **Discount API client**: `src/main/java/org/possystem/service/DiscountApiClient.java`
+- **Authentication**: `src/main/java/org/possystem/service/AuthService.java` ✨ NEW
 
 ### UI Files (ui package)
-- `PosInterface.java` (main frame, global scanner integration)
+- `PosInterface.java` (main frame, global scanner integration, authentication integration)
 - `ActionsPanel.java` (transaction actions + payment zone, 5 buttons including Discount)
 - `CurrentSalePanel.java` (shopping cart table, 4 columns, 35% width)
 - `QuickKeysPanel.java` (product grid + search, promotional items with light violet buttons)
-- `SocketConfigDialog.java` (Socket Configuration UI)
-- `DiscountDialog.java` (discount options dialog - senior, veteran, coupon) ✨ NEW
+- `SocketConfigDialog.java` (Socket Configuration UI with authentication and logout button)
+- `ApiConfigDialog.java` (API Configuration UI with authentication and logout button)
+- `DiscountDialog.java` (discount options dialog - senior, veteran, coupon)
+- `LoginDialog.java` (authentication dialog with on-screen keyboard) ✨ NEW
 - `GlobalBarcodeScanner.java` (global keyboard interceptor)
 
 ### Discount System Files ✨
@@ -469,6 +532,18 @@ Void item → Only recalculate if promotional items/coupons remain
   - `src/main/java/org/possystem/ui/ToastNotification.java`
 - **API Client**:
   - `src/main/java/org/possystem/service/DiscountApiClient.java`
+
+### Authentication System Files ✨ NEW
+- **Entity**: `src/main/java/org/possystem/entity/User.java`
+- **DAO**: `src/main/java/org/possystem/dao/UserDao.java`
+- **Service**: `src/main/java/org/possystem/service/AuthService.java`
+- **UI Component**: `src/main/java/org/possystem/ui/LoginDialog.java`
+- **Features**:
+  - SHA-256 password hashing
+  - 2-minute session timeout
+  - On-screen keyboard support
+  - Physical keyboard input
+  - Logout functionality in config dialogs
 
 ### Socket Files (socket package)
 - `SocketService.java` (server + client + discovery logic)
@@ -577,6 +652,9 @@ Void item → Only recalculate if promotional items/coupons remain
 - ✅ Phase 3 complete: Promotional, Senior/Veteran, and Coupon discounts fully operational
 - ✅ **API optimization**: Regular items add instantly (no API calls), promotional items call API only once
 - ✅ **48 featured products**: 12 promotional (purple buttons) + 36 regular, randomized across 4 pages
+- ✅ **Authentication system**: Username/password protection for Settings dialogs (default: admin/admin)
+- ✅ **Session management**: 2-minute timeout with activity refresh, logout buttons in config dialogs
+- ✅ **Data cleanup**: Removed duplicate pricebook entries
 
 ---
 
@@ -644,9 +722,10 @@ Void item → Only recalculate if promotional items/coupons remain
 3. Confirm build is successful (`./gradlew build`)
 4. Acknowledge you understand the step-by-step approach and the "?" protocol
 5. **Current status**:
-   - Phase 1: ✅ Core POS functionality - COMPLETE
+   - Phase 1: ✅ Core POS functionality - COMPLETE (including authentication system)
    - Phase 2: 🔧 Multi-POS journal viewer - NEEDS POLISH (connection issues between POS instances)
    - Phase 3: ✅ Full discount system - DEPLOYED TO PRODUCTION
+   - Authentication: ✅ Username/password system - COMPLETE
 6. Wait for me to provide the next task or direction
 
 ---
@@ -654,6 +733,7 @@ Void item → Only recalculate if promotional items/coupons remain
 ## ROADMAP STATUS
 
 1. ✅ **Phase 1**: Core POS functionality (POS interface with icon removal and global scanner)
+   - ✅ Authentication system COMPLETE (username/password, 2-minute session timeout)
 2. 🔧 **Phase 2**: Multi-POS journal viewer (needs polish - multi-POS compatibility issues)
    - ⚠️ Works on single POS but connection issues between multiple POS instances
    - 🔧 Disconnect buttons need review
@@ -664,7 +744,7 @@ Void item → Only recalculate if promotional items/coupons remain
    - ✅ Phase 3C: Coupon Support (progressive disclosure, barcode scanning, validation)
 4. 🎉 **Phases 1 & 3 PRODUCTION READY AND DEPLOYED!**
 5. 🔧 **IN PROGRESS**: Phase 2 debugging and polish
-6. 🤔 **UNDER CONSIDERATION**: Authentication for Settings access (API/Socket Configuration protection)
+6. ✅ **COMPLETE**: Authentication for Settings access (API/Socket Configuration protection)
 
 ---
 
@@ -1415,6 +1495,13 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - Disabled when: Total clicked, Change Qty dialog, Socket Config dialog
 - Re-enabled: New transaction, Back to Cart confirmed
 
+### Authentication System
+- **Default Credentials**: username: `admin`, password: `admin`
+- **Session Timeout**: 2 minutes with activity refresh
+- **Protected Dialogs**: API Configuration, Socket Configuration
+- **Features**: SHA-256 password hashing, logout buttons, on-screen keyboard
+- **Access**: Settings → API/Socket Configuration (requires login)
+
 ### Current Sale Table
 - **4 columns**: Name (408px), Qty (70px), Price (100px), Line Total (110px)
 - No checkboxes, no icons
@@ -1498,8 +1585,8 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - ✅ Multi-POS journal viewer (Phase 2)
 - ✅ Transaction management (Phase 1)
 
-**Future Considerations:**
-- Authentication for Settings access (under discussion)
+**System Status:**
+- ✅ Authentication system complete and deployed
 - System is fully functional for production use!
 
 ---

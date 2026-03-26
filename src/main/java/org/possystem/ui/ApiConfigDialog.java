@@ -16,6 +16,7 @@ public class ApiConfigDialog extends JDialog {
     private final Frame parentFrame;
     private final ConfigManager configManager;
     private final DiscountApiClient discountApiClient;
+    private final org.possystem.service.AuthService authService;
 
     private JTextField apiUrlField;
     private JLabel statusLabel;
@@ -23,12 +24,13 @@ public class ApiConfigDialog extends JDialog {
     private JButton saveButton;
     private JButton cancelButton;
 
-    public ApiConfigDialog(Frame parent, ConfigManager configManager, DiscountApiClient discountApiClient) {
+    public ApiConfigDialog(Frame parent, ConfigManager configManager, DiscountApiClient discountApiClient, org.possystem.service.AuthService authService) {
         super(parent, "API Configuration", Dialog.ModalityType.APPLICATION_MODAL);
 
         this.parentFrame = parent;
         this.configManager = configManager;
         this.discountApiClient = discountApiClient;
+        this.authService = authService;
 
         initializeComponents();
         layoutComponents();
@@ -106,10 +108,31 @@ public class ApiConfigDialog extends JDialog {
         headerPanel.setBackground(new Color(70, 130, 180));
         headerPanel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
 
-        JLabel headerLabel = new JLabel("API Configuration");
-        headerLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        // Left side: Title with username
+        String username = authService.getCurrentUsername();
+        String titleText = "API Configuration - Logged in as: " + (username != null ? username : "Unknown");
+        JLabel headerLabel = new JLabel(titleText);
+        headerLabel.setFont(new Font("Arial", Font.BOLD, 20));
         headerLabel.setForeground(Color.WHITE);
         headerPanel.add(headerLabel, BorderLayout.CENTER);
+
+        // Right panel for logout and close buttons
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        rightPanel.setBackground(new Color(70, 130, 180));
+
+        // Logout button
+        JButton logoutButton = new JButton("Logout");
+        logoutButton.setFont(new Font("Arial", Font.BOLD, 12));
+        logoutButton.setBackground(new Color(220, 53, 69)); // Red
+        logoutButton.setForeground(Color.WHITE);
+        logoutButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        logoutButton.setPreferredSize(new Dimension(110, 35));
+        applyRoundedStyleWithBlackOutline(logoutButton);
+        logoutButton.addActionListener(e -> {
+            authService.logout();
+            dispose();
+        });
+        rightPanel.add(logoutButton);
 
         // Close button (X) with custom icon
         JButton closeButton = new JButton() {
@@ -159,7 +182,9 @@ public class ApiConfigDialog extends JDialog {
                 e.getComponent().repaint();
             }
         });
-        headerPanel.add(closeButton, BorderLayout.EAST);
+        rightPanel.add(closeButton);
+
+        headerPanel.add(rightPanel, BorderLayout.EAST);
 
         // Add mouse drag functionality to header
         final java.awt.Point[] mouseDownCompCoords = {null};
@@ -443,6 +468,63 @@ public class ApiConfigDialog extends JDialog {
 
                 g2d.setFont(btn.getFont());
 
+                g2d.setColor(textColor);
+                g2d.drawString(text, x, y);
+
+                g2d.dispose();
+            }
+        });
+    }
+
+    private void applyRoundedStyleWithBlackOutline(JButton button) {
+        button.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setOpaque(false);
+
+        button.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
+            @Override
+            public void paint(Graphics g, JComponent c) {
+                JButton btn = (JButton) c;
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+                int arcSize = 12;
+
+                Color buttonColor = btn.getBackground();
+                Color displayColor;
+                Color textColor;
+
+                if (btn.isEnabled()) {
+                    displayColor = buttonColor;
+                    textColor = btn.getForeground();
+                } else {
+                    displayColor = new Color(
+                        (int)(buttonColor.getRed() * 0.5),
+                        (int)(buttonColor.getGreen() * 0.5),
+                        (int)(buttonColor.getBlue() * 0.5)
+                    );
+                    textColor = new Color(180, 180, 180);
+                }
+
+                // Fill button background
+                g2d.setColor(displayColor);
+                g2d.fillRoundRect(0, 0, btn.getWidth() - 1, btn.getHeight() - 1, arcSize, arcSize);
+
+                // Draw black outline border
+                g2d.setColor(Color.BLACK);
+                g2d.setStroke(new BasicStroke(2f));
+                g2d.drawRoundRect(0, 0, btn.getWidth() - 1, btn.getHeight() - 1, arcSize, arcSize);
+
+                // Draw button text
+                String text = btn.getText();
+                FontMetrics fm = g2d.getFontMetrics(btn.getFont());
+                int textWidth = fm.stringWidth(text);
+                int x = (btn.getWidth() - textWidth) / 2;
+                int y = (btn.getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+
+                g2d.setFont(btn.getFont());
                 g2d.setColor(textColor);
                 g2d.drawString(text, x, y);
 

@@ -85,6 +85,17 @@ public class DatabaseManager {
             )
         """);
 
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id              INT AUTO_INCREMENT PRIMARY KEY,
+                username        VARCHAR(50) UNIQUE NOT NULL,
+                password_hash   VARCHAR(64) NOT NULL,
+                role            VARCHAR(20) DEFAULT 'MANAGER',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login      TIMESTAMP
+            )
+        """);
+
         System.out.println("Tables created successfully!");
     }
 
