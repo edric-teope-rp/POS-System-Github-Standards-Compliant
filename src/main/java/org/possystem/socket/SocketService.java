@@ -58,9 +58,35 @@ public class SocketService {
     private final List<ConnectionListener> connectionListeners = new CopyOnWriteArrayList<>();
     private final List<ServerClientListener> serverClientListeners = new CopyOnWriteArrayList<>();
 
+    /**
+     * Constructor with default config
+     */
     public SocketService(String configPath) {
+        this(configPath, "", 0);
+    }
+
+    /**
+     * Constructor with custom POS name and server port
+     * @param configPath Path to config file
+     * @param posName Custom POS name (empty string means use hostname)
+     * @param serverPort Custom server port (0 means use config default)
+     */
+    public SocketService(String configPath, String posName, int serverPort) {
         this.configPath = configPath;
         this.config = SocketConfig.load(configPath);
+
+        // Override config with command-line arguments if provided
+        if (posName != null && !posName.isEmpty()) {
+            this.config.setPosName(posName);
+        }
+        if (serverPort > 0) {
+            this.config.setServerPort(serverPort);
+        }
+
+        // Save updated config
+        this.config.save(configPath);
+
+        System.out.println("DEBUG: SocketService initialized - POS Name: " + this.config.getPosName() + ", Server Port: " + this.config.getServerPort());
     }
 
     // ==================== Server Methods (Phase 2.1) ====================

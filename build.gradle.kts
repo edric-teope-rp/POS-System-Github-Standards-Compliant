@@ -47,3 +47,22 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
 }
+
+// Override default jar task to create fat JAR with all dependencies
+tasks.jar {
+    archiveBaseName.set("possystem")
+    archiveClassifier.set("all")
+
+    // Include all dependencies
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+
+    // Set main class in manifest
+    manifest {
+        attributes["Main-Class"] = "org.possystem.Main"
+        attributes["Implementation-Version"] = version
+        attributes["Add-Exports"] = "java.desktop/com.apple.eawt"
+    }
+
+    // Exclude duplicate files
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

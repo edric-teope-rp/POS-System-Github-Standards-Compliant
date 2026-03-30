@@ -7,9 +7,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 
 /**
  * Pinned Live Journal Viewer Window
@@ -18,6 +15,7 @@ import java.io.IOException;
  */
 public class PinnedJournalViewerWindow extends JDialog {
     private final SocketService socketService;
+    private final Frame parentFrame;
     private JTextArea journalViewer;
     private JScrollPane journalScrollPane;
 
@@ -27,10 +25,12 @@ public class PinnedJournalViewerWindow extends JDialog {
 
     // Header drag functionality
     private Point mouseDownPoint = null;
+    private boolean isBeingDraggedByUser = false;
 
     public PinnedJournalViewerWindow(Frame parent, SocketService socketService) {
         super(parent, "Live Journal Viewer (Pinned)", Dialog.ModalityType.MODELESS);
         this.socketService = socketService;
+        this.parentFrame = parent;
         System.out.println("DEBUG: PinnedJournalViewerWindow constructor started");
 
         // Calculate font scaling based on screen resolution
@@ -72,8 +72,8 @@ public class PinnedJournalViewerWindow extends JDialog {
         setSize(currentSaleWidth, actionsZoneHeight);
         setLocationRelativeTo(null);
 
-        // Not always on top by default - will be behind Socket Config Dialog but in front of POS Interface
-        setAlwaysOnTop(false);
+        // Always on top - automatically enabled when pinned
+        setAlwaysOnTop(true);
 
         System.out.println("DEBUG: PinnedJournalViewerWindow initialized with width=" + currentSaleWidth + " (Current Sale width), height=" + actionsZoneHeight + " (Actions zone height)");
     }
@@ -112,11 +112,13 @@ public class PinnedJournalViewerWindow extends JDialog {
             @Override
             public void mousePressed(MouseEvent e) {
                 mouseDownPoint = e.getPoint();
+                isBeingDraggedByUser = true;
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 mouseDownPoint = null;
+                // Keep flag set to prevent auto-repositioning after manual drag
             }
         });
 
@@ -175,13 +177,6 @@ public class PinnedJournalViewerWindow extends JDialog {
         toolbar.setBackground(new Color(245, 245, 245));
         toolbar.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        // Always On Top Toggle
-        JCheckBox alwaysOnTopCheckbox = new JCheckBox("Always On Top", false);
-        alwaysOnTopCheckbox.setFont(new Font("Arial", Font.PLAIN, titleFontSize));
-        alwaysOnTopCheckbox.setFocusPainted(false);
-        alwaysOnTopCheckbox.addActionListener(e -> setAlwaysOnTop(alwaysOnTopCheckbox.isSelected()));
-        toolbar.add(alwaysOnTopCheckbox);
-
         // Clear Button
         JButton clearButton = new JButton("Clear");
         clearButton.setBackground(new Color(220, 53, 69));  // Red
@@ -191,15 +186,6 @@ public class PinnedJournalViewerWindow extends JDialog {
         clearButton.addActionListener(e -> journalViewer.setText(""));
         toolbar.add(clearButton);
 
-        // Export Button
-        JButton exportButton = new JButton("Export");
-        exportButton.setBackground(new Color(23, 162, 184));  // Teal
-        exportButton.setForeground(Color.WHITE);
-        exportButton.setFont(new Font("Arial", Font.BOLD, titleFontSize));
-        applyRoundedStyle(exportButton);
-        exportButton.addActionListener(e -> exportJournal());
-        toolbar.add(exportButton);
-
         return toolbar;
     }
 
@@ -208,6 +194,56 @@ public class PinnedJournalViewerWindow extends JDialog {
         socketService.addJournalListener(entry -> SwingUtilities.invokeLater(() -> {
             appendJournalEntry(entry);
         }));
+
+        // Parent frame listener - follow parent when it moves
+        if (parentFrame != null) {
+            parentFrame.addComponentListener(new java.awt.event.ComponentAdapter() {
+                @Override
+                public void componentMoved(java.awt.event.ComponentEvent e) {
+                    // Only auto-reposition if user hasn't manually dragged the window
+                    if (!isBeingDraggedByUser) {
+                        updatePositionRelativeToParent();
+                    }
+                }
+            });
+            System.out.println("DEBUG: Added ComponentListener to parent frame for position tracking");
+
+            // Keep journal viewer on top when parent gains focus
+            parentFrame.addWindowFocusListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowGainedFocus(java.awt.event.WindowEvent e) {
+                    // Bring journal viewer to front when parent is clicked
+                    if (isVisible()) {
+                        toFront();
+                        System.out.println("DEBUG: Brought journal viewer to front after parent gained focus");
+                    }
+                }
+            });
+            System.out.println("DEBUG: Added WindowFocusListener to keep journal viewer on top");
+        }
+    }
+
+    /**
+     * Update position relative to parent frame (maintains same offset)
+     */
+    public void updatePositionRelativeToParent() {
+        if (parentFrame == null) return;
+
+        Rectangle parentBounds = parentFrame.getBounds();
+        int windowWidth = getWidth();
+        int windowHeight = getHeight();
+
+        // Position at the left edge of the parent frame
+        // X: Align with left edge of parent (10px padding inside parent)
+        int xPosition = parentBounds.x + 10;
+
+        // Y: Position so bottom aligns with where Current Sale table ends
+        // Current Sale totals panel height estimation: ~110px
+        int totalsHeight = 110;
+        int yPosition = parentBounds.y + parentBounds.height - totalsHeight - windowHeight;
+
+        setLocation(xPosition, yPosition);
+        System.out.println("DEBUG: Updated pinned window position to follow parent at (" + parentBounds.x + ", " + parentBounds.y + ") -> window at (" + xPosition + ", " + yPosition + ")");
     }
 
     /**
@@ -219,34 +255,6 @@ public class PinnedJournalViewerWindow extends JDialog {
 
         // Auto-scroll to bottom
         journalViewer.setCaretPosition(journalViewer.getDocument().getLength());
-    }
-
-    /**
-     * Export journal to file
-     */
-    private void exportJournal() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Export Journal");
-        fileChooser.setSelectedFile(new File("journal-export-" + System.currentTimeMillis() + ".txt"));
-
-        int result = fileChooser.showSaveDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            try (FileWriter writer = new FileWriter(file)) {
-                writer.write(journalViewer.getText());
-                showSuccessDialog(
-                    "Export Successful",
-                    "Journal exported successfully!",
-                    "File saved to: " + file.getAbsolutePath()
-                );
-            } catch (IOException e) {
-                showErrorDialog(
-                    "Export Failed",
-                    "Failed to export journal",
-                    "Error: " + e.getMessage()
-                );
-            }
-        }
     }
 
     /**

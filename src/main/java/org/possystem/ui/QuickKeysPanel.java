@@ -910,7 +910,7 @@ public class QuickKeysPanel extends JPanel {
 
         // Calculate dialog size
         int dialogWidth = Math.min(400, screenWidth / 3);
-        int dialogHeight = 350;
+        int dialogHeight = 280;
 
         // Create touch-friendly details dialog
         JDialog detailsDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Product Details", Dialog.ModalityType.APPLICATION_MODAL);
@@ -954,7 +954,7 @@ public class QuickKeysPanel extends JPanel {
 
 
         // Details panel with labeled fields
-        JPanel detailsPanel = new JPanel(new GridLayout(5, 2, 10, 12));
+        JPanel detailsPanel = new JPanel(new GridLayout(3, 2, 10, 12));
         detailsPanel.setBorder(BorderFactory.createEmptyBorder(15, 10, 15, 10));
 
         // UPC
@@ -976,29 +976,12 @@ public class QuickKeysPanel extends JPanel {
         priceValue.setFont(new Font("Arial", Font.PLAIN, valueFontSize));
         priceValue.setForeground(new Color(0, 120, 0));
 
-        // Featured
-        JLabel featuredLabel = new JLabel("Featured:");
-        featuredLabel.setFont(new Font("Arial", Font.BOLD, labelFontSize));
-        JLabel featuredValue = new JLabel(product.isFeatured() ? "Yes" : "No");
-        featuredValue.setFont(new Font("Arial", Font.PLAIN, valueFontSize));
-
-        // Quick Key Position
-        JLabel positionLabel = new JLabel("Quick Key:");
-        positionLabel.setFont(new Font("Arial", Font.BOLD, labelFontSize));
-        JLabel positionValue = new JLabel(product.quickKeyPosition() != null ?
-            "#" + product.quickKeyPosition().toString() : "Not assigned");
-        positionValue.setFont(new Font("Arial", Font.PLAIN, valueFontSize));
-
         detailsPanel.add(upcLabel);
         detailsPanel.add(upcValue);
         detailsPanel.add(nameLabel);
         detailsPanel.add(nameValue);
         detailsPanel.add(priceLabel);
         detailsPanel.add(priceValue);
-        detailsPanel.add(featuredLabel);
-        detailsPanel.add(featuredValue);
-        detailsPanel.add(positionLabel);
-        detailsPanel.add(positionValue);
 
         // Close button
         JPanel buttonPanel = new JPanel(new BorderLayout());

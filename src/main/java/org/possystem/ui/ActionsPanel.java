@@ -13,6 +13,7 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,18 @@ public class ActionsPanel extends JPanel {
     private final Runnable onSaleRefresh;
     private Runnable onTransactionFinalized;
     private Runnable onTransactionResumed;
+
+    // Temporary payment storage for split payments (deferred until receipt shown)
+    private static class PendingPayment {
+        String paymentType;
+        double amount;
+
+        PendingPayment(String paymentType, double amount) {
+            this.paymentType = paymentType;
+            this.amount = amount;
+        }
+    }
+    private List<PendingPayment> pendingPayments = new ArrayList<>();
 
     // Barcode Scanner Components
     private JTextField barcodeScannerField;  // Hidden field for scanner input
@@ -429,6 +442,9 @@ public class ActionsPanel extends JPanel {
         );
 
         if (confirmed) {
+            // Clear any pending split payments
+            pendingPayments.clear();
+
             // Return to transaction editing mode
             setTransactionControlsEnabled(true);
             setPaymentButtonsEnabled(false);
@@ -457,6 +473,9 @@ public class ActionsPanel extends JPanel {
             );
 
             if (confirmed) {
+                // Clear any pending split payments
+                pendingPayments.clear();
+
                 transactionService.voidTransaction();
                 transactionService.createTransaction();
                 if (onSaleRefresh != null) {
@@ -591,9 +610,19 @@ public class ActionsPanel extends JPanel {
             // Recalculate total AFTER removing untriggered coupons
             total = transactionService.getTransactionTotal();
 
+            // Check if this is a split payment (pending payments exist)
+            boolean isSplitPayment = !pendingPayments.isEmpty();
+            double totalPending = pendingPayments.stream().mapToDouble(p -> p.amount).sum();
+            double amountToCharge = isSplitPayment ? (total - totalPending) : total;
+
+            // Show confirmation with appropriate amount
+            String confirmationMessage = isSplitPayment
+                    ? String.format("Process card payment of $%.2f?\n(Remaining balance after previous payments)", amountToCharge)
+                    : String.format("Process card payment of $%.2f?", amountToCharge);
+
             boolean confirmed = showConfirmDialog(
                 "Card Payment",
-                String.format("Process card payment of $%.2f?", total),
+                confirmationMessage,
                 "Swipe, insert, or tap card to complete the transaction."
             );
 
@@ -603,9 +632,20 @@ public class ActionsPanel extends JPanel {
                 double subtotal = transactionService.getSubtotal(); // Include discounts
                 double tax = total - subtotal;
 
-                transactionService.processCard("", "", "");
-
-                showReceiptDialog(items, discounts, subtotal, tax, total, total, 0, "CARD");
+                if (isSplitPayment) {
+                    // Add card payment to pending and complete split payment transaction
+                    pendingPayments.add(new PendingPayment("CARD", amountToCharge));
+                    completeSplitPaymentTransaction(items, discounts, subtotal, tax);
+                } else {
+                    // Normal single card payment
+                    transactionService.processCard("", "", "");
+                    showReceiptDialog(items, discounts, subtotal, tax, total, total, 0, "CARD");
+                }
+            } else {
+                // User cancelled - clear pending payments if any
+                if (isSplitPayment) {
+                    pendingPayments.clear();
+                }
             }
         } catch (SQLException e) {
             showError("Payment failed: " + e.getMessage());
@@ -614,8 +654,8 @@ public class ActionsPanel extends JPanel {
 
     private void handlePayInputAmount() {
         try {
-            double total = transactionService.getTransactionTotal();
-            if (total == 0) {
+            double originalTotal = transactionService.getTransactionTotal();
+            if (originalTotal == 0) {
                 showInfoDialog("Cart is Empty", "Cannot Process Payment", "The cart is empty. Add items to start a transaction.");
                 return;
             }
@@ -624,52 +664,98 @@ public class ActionsPanel extends JPanel {
 
             // Loop until valid amount is entered or user cancels
             while (!validInput) {
+                // Calculate current remaining balance
+                double totalPending = pendingPayments.stream().mapToDouble(p -> p.amount).sum();
+                double currentRemaining = originalTotal - totalPending;
+
                 // Show custom input dialog with numeric keypad
-                String input = showInputAmountDialog(total);
+                String input = showInputAmountDialog(currentRemaining);
 
                 // User cancelled - return to cash payment options
                 if (input == null || input.trim().isEmpty()) {
-                    showCashPaymentOptionsDialog(total);
+                    showCashPaymentOptionsDialog(originalTotal);
                     return;
                 }
 
                 try {
                     double tendered = Double.parseDouble(input.trim());
 
-                    // Validate amount - insufficient payment
-                    if (tendered < total) {
-                        showErrorDialog(
-                            "Insufficient Payment",
-                            String.format("Amount tendered ($%.2f) is less than total ($%.2f)", tendered, total),
-                            "Please enter an amount greater than or equal to the total."
-                        );
-                        // Loop back to input dialog
-                        continue;
-                    }
-
                     // Validate amount - negative
-                    if (tendered < 0) {
+                    if (tendered <= 0) {
                         showErrorDialog(
                             "Invalid Amount",
-                            "Amount cannot be negative",
+                            "Amount must be greater than zero",
                             "Please enter a valid positive amount."
                         );
                         // Loop back to input dialog
                         continue;
                     }
 
-                    // Valid amount - process payment
-                    validInput = true;
+                    // Check if payment is insufficient (split payment scenario)
+                    if (tendered < currentRemaining) {
+                        // Store the partial cash payment in memory (not database yet)
+                        pendingPayments.add(new PendingPayment("CASH", tendered));
 
-                    List<TransactionItem> items = transactionService.getCurrentSaleItems();
-                    List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
-                    double subtotal = transactionService.getSubtotal(); // Include discounts
-                    double tax = total - subtotal;
-                    double change = tendered - total;
+                        // Calculate new remaining balance after this payment
+                        double newTotalPending = pendingPayments.stream()
+                                .mapToDouble(p -> p.amount)
+                                .sum();
+                        double newRemaining = originalTotal - newTotalPending;
 
-                    transactionService.processCash(tendered);
+                        // Show insufficient payment dialog with choices
+                        InsufficientPaymentDialog.PaymentChoice choice = InsufficientPaymentDialog.showDialog(
+                            SwingUtilities.getWindowAncestor(this),
+                            originalTotal,
+                            tendered,
+                            newRemaining
+                        );
 
-                    showReceiptDialog(items, discounts, subtotal, tax, total, tendered, change, "CASH");
+                        // Handle user's choice
+                        switch (choice) {
+                            case ADD_MORE_CASH:
+                                // Loop back to show input dialog again with updated remaining
+                                validInput = false; // Keep looping
+                                continue; // Show input dialog again
+
+                            case PAY_WITH_CARD:
+                                // Process remaining balance with card
+                                validInput = true;
+                                processCardPayment(newRemaining);
+                                return;
+
+                            case CANCEL:
+                                // Cancel and clear pending payments
+                                pendingPayments.clear();
+                                validInput = true;
+                                return;
+                        }
+                    } else {
+                        // Sufficient payment - process normally
+                        validInput = true;
+
+                        // Check if this is a split payment (pending payments exist)
+                        boolean isSplitPayment = !pendingPayments.isEmpty();
+
+                        if (isSplitPayment) {
+                            // Add this final cash payment to pending
+                            pendingPayments.add(new PendingPayment("CASH", tendered));
+                        }
+
+                        List<TransactionItem> items = transactionService.getCurrentSaleItems();
+                        List<TransactionDiscount> discounts = transactionService.getActiveDiscounts(); // Get BEFORE payment
+                        double subtotal = transactionService.getSubtotal(); // Include discounts
+                        double tax = originalTotal - subtotal;
+                        double change = tendered - currentRemaining;
+
+                        if (isSplitPayment) {
+                            // Complete split payment transaction (persists pending payments to DB)
+                            completeSplitPaymentTransaction(items, discounts, subtotal, tax);
+                        } else {
+                            // Normal single cash payment
+                            transactionService.processCash(tendered);
+                            showReceiptDialog(items, discounts, subtotal, tax, originalTotal, tendered, change, "CASH");
+                        }
+                    }
 
                 } catch (NumberFormatException e) {
                     showErrorDialog(
@@ -1117,9 +1203,95 @@ public class ActionsPanel extends JPanel {
         cashDialog.setVisible(true);
     }
 
+    /**
+     * Process a card payment for split payment scenario.
+     * Called when user chooses "Pay with Card" after insufficient cash payment.
+     *
+     * @param amount The remaining amount to charge to card
+     */
+    private void processCardPayment(double amount) {
+        try {
+            // Store card payment in pending list (not database yet)
+            pendingPayments.add(new PendingPayment("CARD", amount));
+
+            // Get transaction details for receipt
+            List<TransactionItem> items = transactionService.getCurrentSaleItems();
+            List<TransactionDiscount> discounts = transactionService.getActiveDiscounts();
+            double subtotal = transactionService.getSubtotal();
+            double originalTotal = transactionService.getTransactionTotal();
+            double tax = originalTotal - subtotal;
+
+            // Complete the split payment transaction (persists pending payments to DB)
+            completeSplitPaymentTransaction(items, discounts, subtotal, tax);
+
+        } catch (SQLException e) {
+            showError("Card payment failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Complete a split payment transaction and show receipt.
+     * Finalizes the transaction with multiple payments and displays detailed receipt.
+     *
+     * @param items     List of transaction items
+     * @param discounts List of applied discounts
+     * @param subtotal  Subtotal including discounts
+     * @param tax       Tax amount
+     */
+    private void completeSplitPaymentTransaction(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                                  double subtotal, double tax) {
+        try {
+            double total = subtotal + tax;
+
+            // Persist all pending payments to database NOW (at receipt time)
+            for (PendingPayment pending : pendingPayments) {
+                transactionService.addPayment(pending.paymentType, pending.amount);
+            }
+
+            // Get all payments from database
+            List<org.possystem.entity.TransactionPayment> payments = transactionService.getPayments();
+
+            // Calculate total cash and total card
+            double totalCash = payments.stream()
+                    .filter(p -> "CASH".equals(p.paymentType()))
+                    .mapToDouble(org.possystem.entity.TransactionPayment::amount)
+                    .sum();
+
+            double totalCard = payments.stream()
+                    .filter(p -> "CARD".equals(p.paymentType()))
+                    .mapToDouble(org.possystem.entity.TransactionPayment::amount)
+                    .sum();
+
+            // Update transaction header with split payment info
+            // For split payments, we'll use "SPLIT" as tender_type
+            double totalTendered = totalCash + totalCard;
+            double change = totalCash - total + totalCard; // Only cash can have change
+            if (change < 0) change = 0;
+
+            // Complete the transaction in database
+            transactionService.processCash(totalCash); // This will update the header
+
+            // Show receipt with split payment details using regular receipt dialog
+            showReceiptDialog(items, discounts, subtotal, tax, total, totalTendered, change, "SPLIT", payments);
+
+            // Clear pending payments after successful completion
+            pendingPayments.clear();
+
+        } catch (SQLException e) {
+            showError("Failed to complete split payment: " + e.getMessage());
+        }
+    }
+
     private void showReceiptDialog(List<TransactionItem> items, List<TransactionDiscount> discounts,
                                    double subtotal, double tax, double total, double tendered,
                                    double change, String paymentType) {
+        showReceiptDialog(items, discounts, subtotal, tax, total, tendered, change, paymentType, null);
+    }
+
+    private void showReceiptDialog(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                   double subtotal, double tax, double total, double tendered,
+                                   double change, String paymentType,
+                                   List<org.possystem.entity.TransactionPayment> payments) {
         JDialog receiptDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Receipt", Dialog.ModalityType.APPLICATION_MODAL);
 
         // Calculate dialog size based on content
@@ -1202,7 +1374,7 @@ public class ActionsPanel extends JPanel {
         contentPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
         JTextArea receiptArea = new JTextArea(buildReceiptText(items, discounts, subtotal, tax,
-            total, tendered, change, paymentType));
+            total, tendered, change, paymentType, payments));
         receiptArea.setEditable(false);
         receiptArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         receiptArea.setBackground(new Color(248, 249, 250)); // Light gray background
@@ -1251,6 +1423,13 @@ public class ActionsPanel extends JPanel {
     private String buildReceiptText(List<TransactionItem> items, List<TransactionDiscount> discounts,
                                     double subtotal, double tax, double total, double tendered,
                                     double change, String paymentType) {
+        return buildReceiptText(items, discounts, subtotal, tax, total, tendered, change, paymentType, null);
+    }
+
+    private String buildReceiptText(List<TransactionItem> items, List<TransactionDiscount> discounts,
+                                    double subtotal, double tax, double total, double tendered,
+                                    double change, String paymentType,
+                                    List<org.possystem.entity.TransactionPayment> payments) {
         StringBuilder receipt = new StringBuilder();
         receipt.append("=================== RECEIPT ===================\n\n");
 
@@ -1333,15 +1512,52 @@ public class ActionsPanel extends JPanel {
         receipt.append(String.format("Subtotal:                           $%-8.2f\n", subtotal));
         receipt.append(String.format("Tax (7%%):                           $%-8.2f\n", tax));
         receipt.append(String.format("TOTAL:                              $%-8.2f\n\n", total));
-        receipt.append(String.format("Payment Method: %s\n", paymentType));
-        receipt.append(String.format("Tendered:                           $%-8.2f\n", tendered));
-        receipt.append(String.format("Change:                             $%-8.2f\n", change));
+
+        // Show payment breakdown if split payment, otherwise show regular payment info
+        if (payments != null && !payments.isEmpty()) {
+            // Split payment - show payment breakdown
+            receipt.append("========== PAYMENT BREAKDOWN ==================\n");
+            double totalPaid = 0.0;
+            double totalCash = 0.0;
+            double totalCard = 0.0;
+
+            for (org.possystem.entity.TransactionPayment payment : payments) {
+                String paymentLabel = String.format("  %s (#%d):", payment.paymentType(), payment.paymentOrder());
+                receipt.append(String.format("%-36s  $%-8.2f\n", paymentLabel, payment.amount()));
+                totalPaid += payment.amount();
+
+                if ("CASH".equals(payment.paymentType())) {
+                    totalCash += payment.amount();
+                } else if ("CARD".equals(payment.paymentType())) {
+                    totalCard += payment.amount();
+                }
+            }
+
+            receipt.append("-----------------------------------------------\n");
+            receipt.append(String.format("Total Paid:                         $%-8.2f\n", totalPaid));
+            double splitChange = totalCash - total + totalCard; // Only cash contributes to change
+            if (splitChange < 0) splitChange = 0;
+            receipt.append(String.format("Change:                             $%-8.2f\n", splitChange));
+        } else {
+            // Regular payment - show single payment info
+            receipt.append(String.format("Payment Method: %s\n", paymentType));
+            receipt.append(String.format("Tendered:                           $%-8.2f\n", tendered));
+            receipt.append(String.format("Change:                             $%-8.2f\n", change));
+        }
+
         receipt.append("\n   Thank you! Please come again soon!\n");
         return receipt.toString();
     }
 
+    /**
+     * Show receipt dialog for split payment transactions.
+     * Displays detailed payment breakdown showing all cash and card payments.
+     */
     private void startNewTransaction() {
         try {
+            // Clear any pending split payments from previous transaction
+            pendingPayments.clear();
+
             transactionService.createTransaction();
             if (onSaleRefresh != null) {
                 onSaleRefresh.run();

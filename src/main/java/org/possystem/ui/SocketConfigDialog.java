@@ -442,12 +442,12 @@ public class SocketConfigDialog extends JDialog {
 
         panel.add(toolbar, BorderLayout.NORTH);
 
-        // Table
-        String[] columnNames = {"POS Name", "IP Address", "Port", "Status", "Last Log", "Action"};
+        // Table (removed Action column)
+        String[] columnNames = {"POS Name", "IP Address", "Port", "Status", "Last Log"};
         tableModel = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return column == 5; // Only Action column is editable (button)
+                return false; // No editable columns
             }
         };
 
@@ -455,8 +455,6 @@ public class SocketConfigDialog extends JDialog {
         posSystemsTable.setFont(new Font("Arial", Font.PLAIN, tableFontSize));
         posSystemsTable.setRowHeight(Math.round(30 * fontScale));
         posSystemsTable.getTableHeader().setFont(new Font("Arial", Font.BOLD, tableFontSize));
-        posSystemsTable.getColumnModel().getColumn(5).setCellRenderer(new ButtonRenderer());
-        posSystemsTable.getColumnModel().getColumn(5).setCellEditor(new ButtonEditor(new JCheckBox()));
 
         JScrollPane scrollPane = new JScrollPane(posSystemsTable);
         panel.add(scrollPane, BorderLayout.CENTER);
@@ -498,14 +496,6 @@ public class SocketConfigDialog extends JDialog {
         applyRoundedStyle(clearButton);
         clearButton.addActionListener(e -> journalViewer.setText(""));
         toolbar.add(clearButton);
-
-        JButton exportButton = new JButton("Export");
-        exportButton.setBackground(new Color(23, 162, 184));  // Teal
-        exportButton.setForeground(Color.WHITE);
-        exportButton.setFont(new Font("Arial", Font.BOLD, titleFontSize));
-        applyRoundedStyle(exportButton);
-        exportButton.addActionListener(e -> exportJournal());
-        toolbar.add(exportButton);
 
         panel.add(toolbar, BorderLayout.NORTH);
 
@@ -682,7 +672,6 @@ public class SocketConfigDialog extends JDialog {
         String status = sysInfo.isConnected() ? "Connected" : "Available";
         String lastLog = sysInfo.getLastLogTimestamp() != null ?
                 sysInfo.getLastLogTimestamp().format(TIME_FORMATTER) : "N/A";
-        String action = sysInfo.isConnected() ? "Disconnect" : "Connect";
 
         if (rowIndex == null) {
             // Add new row
@@ -691,8 +680,7 @@ public class SocketConfigDialog extends JDialog {
                     sysInfo.getIpAddress(),
                     sysInfo.getPort(),
                     status,
-                    lastLog,
-                    action
+                    lastLog
             });
             rowMap.put(identifier, tableModel.getRowCount() - 1);
         } else {
@@ -700,7 +688,6 @@ public class SocketConfigDialog extends JDialog {
             tableModel.setValueAt(sysInfo.getDisplayName(), rowIndex, 0);
             tableModel.setValueAt(status, rowIndex, 3);
             tableModel.setValueAt(lastLog, rowIndex, 4);
-            tableModel.setValueAt(action, rowIndex, 5);
         }
     }
 
@@ -711,9 +698,7 @@ public class SocketConfigDialog extends JDialog {
         Integer rowIndex = rowMap.get(identifier);
         if (rowIndex != null) {
             String status = connected ? "Connected" : "Available";
-            String action = connected ? "Disconnect" : "Connect";
             tableModel.setValueAt(status, rowIndex, 3);
-            tableModel.setValueAt(action, rowIndex, 5);
         }
     }
 
@@ -907,15 +892,22 @@ public class SocketConfigDialog extends JDialog {
         addManualDialog.add(contentPanel, BorderLayout.CENTER);
         addManualDialog.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Size and position at upper center of screen
+        // Size and position relative to parent frame
         addManualDialog.pack();
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         int dialogWidth = addManualDialog.getWidth();
         int dialogHeight = addManualDialog.getHeight();
 
-        // Position at upper center (20% from top)
-        int x = (screenSize.width - dialogWidth) / 2;
-        int y = (int) (screenSize.height * 0.20); // 20% from top
+        // Position relative to parent frame (centered horizontally, 20% from parent top)
+        Rectangle parentBounds = parentFrame.getBounds();
+        int x = parentBounds.x + (parentBounds.width - dialogWidth) / 2;
+        int y = parentBounds.y + (int) (parentBounds.height * 0.20);
+
+        // Ensure dialog stays on screen
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        if (x < 0) x = 10;
+        if (y < 0) y = 10;
+        if (x + dialogWidth > screenSize.width) x = screenSize.width - dialogWidth - 10;
+        if (y + dialogHeight > screenSize.height) y = screenSize.height - dialogHeight - 10;
 
         addManualDialog.setLocation(x, y);
         addManualDialog.setVisible(true);
@@ -985,32 +977,6 @@ public class SocketConfigDialog extends JDialog {
     /**
      * Export journal to file
      */
-    private void exportJournal() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Export Journal");
-        fileChooser.setSelectedFile(new java.io.File("exported-journal.log"));
-
-        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            try {
-                java.nio.file.Files.writeString(
-                        fileChooser.getSelectedFile().toPath(),
-                        journalViewer.getText()
-                );
-                showSuccessDialog(
-                        "Success",
-                        "Export Successful",
-                        "Journal exported successfully to:<br>" + fileChooser.getSelectedFile().getName()
-                );
-            } catch (Exception e) {
-                showErrorDialog(
-                        "Error",
-                        "Export Failed",
-                        "Failed to export journal:<br>" + e.getMessage()
-                );
-            }
-        }
-    }
-
     /**
      * Toggle pinned journal viewer window
      */
@@ -1022,26 +988,9 @@ public class SocketConfigDialog extends JDialog {
             System.out.println("DEBUG: Creating new PinnedJournalViewerWindow...");
             pinnedWindow = new PinnedJournalViewerWindow(parentFrame, socketService);
 
-            // Position pinned window so its bottom aligns with the bottom of the Current Sale table
-            // (just before the subtotal section)
-            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-            int windowHeight = pinnedWindow.getHeight();
-
-            // Current Sale totals panel height estimation:
-            // - 3 labels: subtotal (18pt ~25px), tax (18pt ~25px), total (22pt ~30px)
-            // - 2 gaps of 5px
-            // - Top/bottom padding: 10px each
-            // Total: ~110px
-            int totalsHeight = 110;
-
-            // Calculate Y position so bottom of window aligns with bottom of table
-            int yPosition = screenSize.height - totalsHeight - windowHeight;
-
-            // X position: slightly to the left (at the edge of screen or with small padding)
-            int xPosition = 10; // 10px padding from left edge
-
-            pinnedWindow.setLocation(xPosition, yPosition);
-            System.out.println("DEBUG: Set pinnedWindow location to: (" + xPosition + ", " + yPosition + ") - bottom aligns with Current Sale table");
+            // Position relative to parent frame
+            pinnedWindow.updatePositionRelativeToParent();
+            System.out.println("DEBUG: Set pinnedWindow location relative to parent");
 
             pinnedWindow.setVisible(true);
             System.out.println("DEBUG: Called setVisible(true) on pinnedWindow. IsVisible: " + pinnedWindow.isVisible());
@@ -1870,70 +1819,6 @@ public class SocketConfigDialog extends JDialog {
             }
         });
         return closeButton;
-    }
-
-    /**
-     * Button renderer for table action column
-     */
-    class ButtonRenderer extends JButton implements javax.swing.table.TableCellRenderer {
-        public ButtonRenderer() {
-            setOpaque(true);
-            setFont(new Font("Arial", Font.PLAIN, tableFontSize));
-        }
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                                                       boolean isSelected, boolean hasFocus, int row, int column) {
-            setText((value == null) ? "Connect" : value.toString());
-            return this;
-        }
-    }
-
-    /**
-     * Button editor for table action column
-     */
-    class ButtonEditor extends DefaultCellEditor {
-        private JButton button;
-        private String label;
-        private boolean clicked;
-        private int row;
-
-        public ButtonEditor(JCheckBox checkBox) {
-            super(checkBox);
-            button = new JButton();
-            button.setOpaque(true);
-            button.setFont(new Font("Arial", Font.PLAIN, tableFontSize));
-            button.addActionListener(e -> {
-                fireEditingStopped();
-            });
-        }
-
-        @Override
-        public Component getTableCellEditorComponent(JTable table, Object value,
-                                                     boolean isSelected, int row, int column) {
-            this.row = row;
-            label = (value == null) ? "Connect" : value.toString();
-            button.setText(label);
-            clicked = true;
-            return button;
-        }
-
-        @Override
-        public Object getCellEditorValue() {
-            if (clicked) {
-                String posName = (String) tableModel.getValueAt(row, 0);
-                String ipAddress = (String) tableModel.getValueAt(row, 1);
-                int port = (int) tableModel.getValueAt(row, 2);
-
-                if ("Connect".equals(label)) {
-                    socketService.connectToRemotePOS(ipAddress, port, posName);
-                } else {
-                    socketService.disconnectFromRemotePOS(ipAddress, port);
-                }
-            }
-            clicked = false;
-            return label;
-        }
     }
 
     /**
