@@ -20,7 +20,7 @@ public class SocketConfig {
 
     public SocketConfig() {
         this.posName = "";
-        this.serverPort = 9000;
+        this.serverPort = 8080;  // Default port changed from 9000 to 8080
         this.autoStartServer = false;
         this.savedConnections = new ArrayList<>();
     }

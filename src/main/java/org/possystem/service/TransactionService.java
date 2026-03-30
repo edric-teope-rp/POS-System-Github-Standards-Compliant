@@ -3,6 +3,7 @@ package org.possystem.service;
 import org.possystem.dao.TransactionHeaderDao;
 import org.possystem.dao.TransactionItemDao;
 import org.possystem.dao.TransactionDiscountDao;
+import org.possystem.dao.TransactionPaymentDao;
 import org.possystem.dao.PriceBookDao;
 import org.possystem.dto.SeniorVeteranDiscountResponse;
 import org.possystem.dto.PromotionalDiscountResponse;
@@ -10,6 +11,7 @@ import org.possystem.dto.CouponValidationResponse;
 import org.possystem.entity.TransactionHeader;
 import org.possystem.entity.TransactionItem;
 import org.possystem.entity.TransactionDiscount;
+import org.possystem.entity.TransactionPayment;
 import org.possystem.entity.PriceBook;
 import org.possystem.event.PosEvent;
 import org.possystem.event.PosEventDispatcher;
@@ -39,6 +41,7 @@ public class TransactionService implements PosEventDispatcher {
     private final TransactionHeaderDao transactionHeaderDao;
     private final TransactionItemDao transactionItemDao;
     private final TransactionDiscountDao transactionDiscountDao;
+    private final TransactionPaymentDao transactionPaymentDao;
     private final PriceBookDao priceBookDao;
     private SocketService socketService;
     private DiscountApiClient discountApiClient;
@@ -52,6 +55,7 @@ public class TransactionService implements PosEventDispatcher {
         this.transactionHeaderDao = new TransactionHeaderDao();
         this.transactionItemDao = new TransactionItemDao();
         this.transactionDiscountDao = new TransactionDiscountDao();
+        this.transactionPaymentDao = new TransactionPaymentDao();
         this.priceBookDao = new PriceBookDao();
     }
 
@@ -114,7 +118,7 @@ public class TransactionService implements PosEventDispatcher {
         );
         currentTransactionId = transactionHeaderDao.insert(header);
 
-        // Clear triggered promotions and pending coupons for new transaction
+        // Clear triggered promotions, pending coupons, and payments for new transaction
         triggeredPromotions.clear();
 
         // DEBUG: Log HashMap clear
@@ -124,6 +128,8 @@ public class TransactionService implements PosEventDispatcher {
         pendingCouponCodes.clear();
         System.out.println("HashMap cleared");
         System.out.println("=========================================");
+
+        // Note: No need to clear payments here - new transaction has no payments yet
 
         // Log transaction creation
         logJournal("TX_CREATE", "TX_ID:" + currentTransactionId);
@@ -263,6 +269,9 @@ public class TransactionService implements PosEventDispatcher {
         logJournal("TX_VOID", "TX_ID:" + currentTransactionId + "|REASON:user_cancelled");
 
         dispatchEvent(PosEvent.TRANSACTION_VOIDED, currentTransactionId);
+
+        // Clear payments for this transaction
+        clearPayments();
 
         // Clear transaction state
         currentTransactionId = -1;
@@ -1297,6 +1306,109 @@ public class TransactionService implements PosEventDispatcher {
                 System.err.println("Failed to recalculate coupon " + couponCode + ": " + e.getMessage());
                 e.printStackTrace();
             }
+        }
+    }
+
+    // =====================================================
+    // SPLIT PAYMENT METHODS (Phase 4 - Split Payment)
+    // =====================================================
+
+    /**
+     * Add a payment to the current transaction.
+     * Used for split payment support (multiple cash/card payments).
+     *
+     * @param paymentType 'CASH' or 'CARD'
+     * @param amount The payment amount
+     * @throws SQLException if database operation fails
+     */
+    public void addPayment(String paymentType, double amount) throws SQLException {
+        if (currentTransactionId == -1) {
+            throw new IllegalStateException("No active transaction");
+        }
+
+        // Get next payment order number (1st, 2nd, 3rd payment, etc.)
+        int paymentOrder = transactionPaymentDao.getPaymentCount(currentTransactionId) + 1;
+
+        // Create payment record
+        TransactionPayment payment = new TransactionPayment(
+                0,                      // id (auto-generated)
+                currentTransactionId,
+                paymentType,
+                amount,
+                paymentOrder,
+                null                    // createdAt (auto-generated)
+        );
+
+        int paymentId = transactionPaymentDao.insert(payment);
+
+        // Log payment addition
+        String details = String.format("TX_ID:%d|PAYMENT_ID:%d|TYPE:%s|AMOUNT:%.2f|ORDER:%d",
+                currentTransactionId, paymentId, paymentType, amount, paymentOrder);
+        logJournal("PAYMENT_ADD", details);
+
+        dispatchEvent(PosEvent.ITEM_ADDED, null); // Trigger UI refresh
+    }
+
+    /**
+     * Get total amount paid so far for the current transaction.
+     *
+     * @return Total paid amount (sum of all payments)
+     * @throws SQLException if database operation fails
+     */
+    public double getTotalPaid() throws SQLException {
+        if (currentTransactionId == -1) {
+            return 0.0;
+        }
+        return transactionPaymentDao.getTotalPaidAmount(currentTransactionId);
+    }
+
+    /**
+     * Get remaining balance to be paid.
+     *
+     * @return Remaining balance (total - already paid)
+     * @throws SQLException if database operation fails
+     */
+    public double getRemainingBalance() throws SQLException {
+        if (currentTransactionId == -1) {
+            return 0.0;
+        }
+        double total = getTransactionTotal();
+        double paid = getTotalPaid();
+        return total - paid;
+    }
+
+    /**
+     * Get all payments for the current transaction.
+     *
+     * @return List of payments ordered by payment_order
+     * @throws SQLException if database operation fails
+     */
+    public List<TransactionPayment> getPayments() throws SQLException {
+        if (currentTransactionId == -1) {
+            return new ArrayList<>();
+        }
+        return transactionPaymentDao.findByTransactionId(currentTransactionId);
+    }
+
+    /**
+     * Check if the current transaction has any payments recorded.
+     *
+     * @return true if payments exist, false otherwise
+     * @throws SQLException if database operation fails
+     */
+    public boolean hasPayments() throws SQLException {
+        return getTotalPaid() > 0.0;
+    }
+
+    /**
+     * Clear all payments for the current transaction.
+     * Used when voiding a transaction or starting a new one.
+     *
+     * @throws SQLException if database operation fails
+     */
+    private void clearPayments() throws SQLException {
+        if (currentTransactionId != -1) {
+            transactionPaymentDao.deleteByTransactionId(currentTransactionId);
         }
     }
 }

@@ -4,18 +4,37 @@ import org.h2.tools.Server;
 import java.sql.*;
 
 public class DatabaseManager {
-    private static final String DB_URL = "jdbc:h2:~/possystemdb";
+    private static String DB_URL = "jdbc:h2:~/possystemdb";  // Configurable
     private static final String DB_USER = "sa";
     private static final String DB_PASS = "";
     private static Connection connection;
 
+    /**
+     * Initialize database with default name
+     */
     public static void initialize() {
+        initialize("possystemdb");
+    }
+
+    /**
+     * Initialize database with custom name
+     */
+    public static void initialize(String dbName) {
+        DB_URL = "jdbc:h2:~/" + dbName;
+
+        // Use different H2 console port for different database instances
+        int h2ConsolePort = 8082;
+        if (!dbName.equals("possystemdb")) {
+            // For non-default databases, use port 8083, 8084, etc.
+            h2ConsolePort = 8082 + Math.abs(dbName.hashCode() % 10);
+        }
+
         try {
             Server webServer = Server.createWebServer(
-                    "-web", "-webAllowOthers", "-webPort", "8082"
+                    "-web", "-webAllowOthers", "-webPort", String.valueOf(h2ConsolePort)
             );
             webServer.start();
-            System.out.println("H2 Console available at: http://localhost:8082");
+            System.out.println("H2 Console available at: http://localhost:" + h2ConsolePort);
 
             connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
             System.out.println("Database connected successfully!");
@@ -82,6 +101,18 @@ public class DatabaseManager {
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (transaction_id) REFERENCES transaction_header(id),
                 FOREIGN KEY (item_id) REFERENCES transaction_items(id)
+            )
+        """);
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS transaction_payments (
+                id              INT AUTO_INCREMENT PRIMARY KEY,
+                transaction_id  INT NOT NULL,
+                payment_type    VARCHAR(10) NOT NULL,
+                amount          DOUBLE NOT NULL,
+                payment_order   INT NOT NULL,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (transaction_id) REFERENCES transaction_header(id)
             )
         """);
 

@@ -41,13 +41,23 @@ public class PosInterface extends JFrame {
     private boolean isMaximized = false;
     private Rectangle previousBounds = null;
 
+    /**
+     * Default constructor (for backward compatibility)
+     */
     public PosInterface() {
+        this("", 8080);
+    }
+
+    /**
+     * Constructor with custom POS name and server port
+     */
+    public PosInterface(String posName, int serverPort) {
         this.configManager = new ConfigManager();
         this.authService = new AuthService();
         this.priceBookService = new PriceBookService();
         this.transactionService = new TransactionService();
         this.discountApiClient = new DiscountApiClient(configManager.getDiscountApiUrl());
-        this.socketService = new SocketService("config/socket-config.json");
+        this.socketService = new SocketService("config/socket-config.json", posName, serverPort);
 
         // Wire socket service to transaction service for journal broadcasting
         this.transactionService.setSocketService(socketService);
