@@ -172,6 +172,41 @@
       "posName": "Main",
       "ipAddress": "192.168.0.172",
       "port": 8080
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
     }
   ]
 }

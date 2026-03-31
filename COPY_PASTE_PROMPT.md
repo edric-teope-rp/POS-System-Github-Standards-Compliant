@@ -14,7 +14,7 @@ All phases complete and deployed to production! The discount engine API has been
 
 ## CURRENT STATE
 
-- **Branch**: feature/almost-final (current working branch)
+- **Branch**: release/1.0.7 (current working branch)
 - **Main Branch**: main
 - **Build**: ✅ Successful
 - **Tech**: Java 25, Gradle, H2 Database, Swing GUI, SLF4J+Logback, Gson (for JSON)
@@ -117,6 +117,63 @@ java --enable-preview -jar build/libs/possystem-1.0-SNAPSHOT-all.jar --db=possys
 
 **Status**: ✅ PRODUCTION READY - Fully functional for multi-instance testing and deployment
 
+#### CURRENT WORK: Virtual Journal Integration with External POS Systems ⏳ IN PROGRESS
+
+**Objective:** Integrate our POS system's virtual journal with 2 external POS systems for real-time transaction log synchronization.
+
+**Connected Systems:**
+- **System T (Thomas)**: ✅ WORKING - Logs syncing successfully in both directions (192.168.8.186:9000)
+- **System R (Raya)**: ❌ NOT WORKING - Connected but not broadcasting transactions (192.168.8.224:9999)
+
+**Status Summary:**
+- ✅ Our socket server/client architecture ready (port 8080)
+- ✅ Multi-format parser implemented and tested
+- ✅ Complete debug logging in place for diagnostics
+- ✅ System T integration complete (100%)
+- ❌ System R blocked (0%)
+
+**System R Architecture (Discovered 2026-03-31):**
+- **R's POS Client (Java Swing):** Generates events, acts as CLIENT, broadcasts to multiple servers
+- **R's Journal Server (Spring Boot :9999):** Accepts connections, but NOT broadcasting to clients
+- **Known:** R's POS Client successfully sends to Thomas (192.168.8.186:9000) ✅
+- **Issue:** R's Journal Server accepts our connection but doesn't relay events to us
+
+**Two Integration Paths:**
+1. **Path 1 (Original):** R fixes Journal Server broadcasting → We receive via existing connection
+2. **Path 2 (Alternative):** R's POS Client adds our IP:8080 → Direct broadcasts to us (bypasses R's server)
+
+**Key Documents:**
+- 📄 `VIRTUAL_JOURNAL_INTEGRATION_STATUS.md` - **READ THIS FIRST** for complete status
+- 📄 `POS_INTEGRATION_EXTERNAL.md` - R's POS Client message format (10 event types, actual code snippets)
+- 📄 `INSTRUCTIONS_FOR_R_SYSTEM.md` - Fix instructions for R's Journal Server
+- 📄 `CODEBASE_ANALYSIS_REPORT.md` - R's Journal Server architecture analysis
+- 📄 `MESSAGE_FORMAT_RESPONSE.md` - System T's format analysis (if available)
+- 📄 `POS_MESSAGE_FORMAT_ANALYSIS_PROMPT.md` - Template for analyzing POS formats
+- 📄 `TEST_R_CONNECTION.md` - Diagnostic procedures
+
+**Parser Updates (2026-03-30):**
+- ✅ Enhanced JSON parser in `RemoteJournalEntry.java`
+- ✅ Supports multiple timestamp formats (long, double, ISO-8601)
+- ✅ Supports multiple field structures (details, payload, eventType, type)
+- ✅ Event type normalization for 30+ event types (PRODUCT_ADDED → ITEM_ADD, etc.)
+- ✅ Enhanced debug logging for troubleshooting
+- ✅ Backward compatible with existing System T
+
+**Debug Logging Available (2026-03-31):**
+- ✅ Connection establishment (SocketService.java:334)
+- ✅ Message reception (SocketService.java:414)
+- ✅ JSON parsing step-by-step (RemoteJournalEntry.java:83-181)
+- ✅ Error handling with full context (RemoteJournalEntry.java:186)
+- ✅ Console color-coded output (SocketService.java:658)
+
+**Next Steps:**
+1. ⏳ Option A: Wait for R to implement Journal Server broadcasting fixes
+2. ⏳ Option B: Ask R to add our IP:8080 to their POS Client configuration
+3. ⏳ Test connection and verify logs appear in Live Journal Viewer
+4. ✅ Monitor System T for continued stability
+
+**Integration Progress:** 50% complete (1 of 2 systems working)
+
 ---
 
 ### PHASE 3: Discount Service (Spring Boot REST API) ✅ ALL PHASES COMPLETE!
@@ -155,6 +212,98 @@ java --enable-preview -jar build/libs/possystem-1.0-SNAPSHOT-all.jar --db=possys
 ---
 
 ## RECENT WORK COMPLETED (Latest Session)
+
+### v4.3 - Quick Keys Search Enhancements (2026-03-31) ✅
+
+#### Auto-Add Item on UPC Match - COMPLETE ✅
+
+✅ **Feature: Type UPC + Press Enter to Auto-Add:**
+- Modified `QuickKeysPanel.java` Enter key handler (line ~1432)
+- Exact UPC match detection (case-insensitive)
+- Auto-adds item to cart when Enter pressed with exact UPC
+- Dialog closes automatically after adding item
+- Non-disruptive: Dialog stays open if no exact match (allows continued typing)
+- Compatible with barcode scanner (sends UPC + Enter)
+
+✅ **Behavior:**
+- Type exact UPC → Press Enter → Item added, dialog closes ✅
+- Type partial UPC → Press Enter → Dialog stays open ✅
+- Type product name → Press Enter → Dialog stays open ✅
+- Empty search → Press Enter → Dialog stays open ✅
+
+#### Smart Suggestion Threshold - COMPLETE ✅
+
+✅ **Problem Solved:** Suggestion panel disappeared when typing spaces in product names (e.g., "COFFE MEDIUM")
+
+✅ **Solution: Length-Based Threshold:**
+- Short searches (1-2 chars) → Require 3+ matches to show panel (prevents overwhelming results)
+- Longer searches (3+ chars) → Show ALL matches, even if only 1 result
+- Modified `handleSearchInput()` method (line ~703)
+
+✅ **Examples:**
+- Type "C" → Needs 3+ matches (prevents showing 100+ products)
+- Type "COFFE MEDIUM" → Shows all matches even if only 1 product ✅
+
+**Files Modified:**
+- `src/main/java/org/possystem/ui/QuickKeysPanel.java`
+
+**Status:** Both features production ready! 🚀
+
+---
+
+### Virtual Journal Integration Update (2026-03-31)
+
+#### R's POS Architecture Discovered ✅
+
+**R has TWO separate components:**
+
+1. **R's POS Client (Java Swing)**
+   - Generates transaction events
+   - Acts as CLIENT (sends TO servers)
+   - Configured servers: `localhost:9999`, `192.168.8.186:9000` (Thomas)
+   - Status: ✅ Working (sends to Thomas successfully)
+
+2. **R's Journal Server (Spring Boot on port 9999)**
+   - Acts as SERVER (accepts connections FROM clients)
+   - Status: ❌ NOT broadcasting to connected clients (known issue)
+
+**Key Discovery from R's Documentation:**
+- R's POS Client broadcasts to multiple servers simultaneously
+- R and Thomas are communicating successfully
+- R's Journal Server accepts our connection but doesn't broadcast events
+
+**Two Possible Integration Paths:**
+
+**Path 1: Wait for R to Fix Journal Server Broadcasting** (Original Plan)
+- R implements broadcast functionality in their Journal Server
+- We connect as CLIENT to R's server (already configured)
+- Status: ⏳ Waiting on R's fix
+
+**Path 2: R's POS Client Connects Directly to Us** (Alternative)
+- R adds our IP:PORT to their client configuration
+- R's POS Client sends directly to our server (port 8080)
+- Bypasses R's Journal Server issue
+- Status: 🟡 Requires R to add our server address
+
+**Debug Logging Status:**
+- ✅ Complete debug logging in place
+- ✅ Connection establishment logs (line 334)
+- ✅ Message reception logs (line 414)
+- ✅ JSON parsing step-by-step (lines 83-181)
+- ✅ Error handling with full details (lines 186, 419)
+- ✅ Console color-coded output (line 658)
+
+**Current Connections:**
+- **Thomas (T):** 192.168.8.186:9000 → ✅ Working, full bidirectional sync
+- **Raya (R):** 192.168.8.224:9999 → ❌ Connected but not receiving broadcasts
+
+**Documentation Updated:**
+- `POS_INTEGRATION_EXTERNAL.md` - R's detailed message format (10 event types)
+- `VIRTUAL_JOURNAL_INTEGRATION_STATUS.md` - Integration status and troubleshooting
+
+---
+
+## RECENT WORK COMPLETED (Latest Session - Prior)
 
 ### v4.1 - Phase 2 Multi-Instance Testing & Live Journal Viewer Polish (2026-03-26) ✅
 
@@ -885,14 +1034,16 @@ Void item → Only recalculate if promotional items/coupons remain
 1. Confirm you see the project at `/Users/ed/IdeaProjects/POSSystem`
 2. Check current branch
 3. Confirm build is successful (`./gradlew build`)
-4. Acknowledge you understand the step-by-step approach and the "?" protocol
-5. **Current status**:
+4. **Read VIRTUAL_JOURNAL_INTEGRATION_STATUS.md** for current virtual journal integration status
+5. Acknowledge you understand the step-by-step approach and the "?" protocol
+6. **Current status**:
    - Phase 1: ✅ Core POS functionality - COMPLETE (including authentication system)
    - Phase 2: ✅ Multi-POS journal viewer - COMPLETE + TESTABLE (multi-instance support ready)
    - Phase 3: ✅ Full discount system - DEPLOYED TO PRODUCTION
    - Authentication: ✅ Username/password system - COMPLETE
    - JAR Distribution: ✅ Fat JAR available for deployment (29MB)
-6. Wait for me to provide the next task or direction
+   - **Virtual Journal Integration**: ⏳ IN PROGRESS (System T ✅ working, System R ❌ blocked)
+7. Wait for me to provide the next task or direction
 
 ---
 
@@ -913,6 +1064,24 @@ Void item → Only recalculate if promotional items/coupons remain
 4. 🎉 **ALL PHASES PRODUCTION READY AND DEPLOYED!**
 5. ✅ **COMPLETE**: Authentication for Settings access (API/Socket Configuration protection)
 6. ✅ **COMPLETE**: Multi-instance testing capability for Phase 2 validation
+
+---
+
+## 📚 KEY DOCUMENTATION FILES
+
+### Project Documentation
+- 📄 `README.md` - Project overview
+- 📄 `COPY_PASTE_PROMPT.md` - **THIS FILE** - Complete project handoff document
+- 📄 `PHASE_2_TESTING_GUIDE.md` - Multi-instance testing setup instructions
+
+### Virtual Journal Integration (Phase 2 - External POS Systems)
+- 📄 `VIRTUAL_JOURNAL_INTEGRATION_STATUS.md` - **READ FIRST** - Integration status for System T and System R
+- 📄 `POS_INTEGRATION_EXTERNAL.md` - System R's detailed message format specification (10 event types)
+- 📄 `INSTRUCTIONS_FOR_R_SYSTEM.md` - Fix instructions for System R broadcasting
+- 📄 `CODEBASE_ANALYSIS_REPORT.md` - System R's architecture analysis
+- 📄 `MESSAGE_FORMAT_RESPONSE.md` - System T's format analysis (if available)
+- 📄 `POS_MESSAGE_FORMAT_ANALYSIS_PROMPT.md` - Template for analyzing POS message formats
+- 📄 `TEST_R_CONNECTION.md` - Diagnostic procedures for troubleshooting connections
 
 ---
 
@@ -1854,13 +2023,7 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - **Business Impact**: High - helps with inventory and staffing decisions
 
 #### 6. Customer-Facing Display 👀
-- **Purpose**: Modern customer experience
-- **Features**:
-  - Second window showing items being scanned
-  - Running total visible to customer
-  - Product images (if available)
-  - "Thank you" message after payment
-  - Promotional messages during idle
+- **Purpose**: Modern customer experience (second display showing cart and totals to customer)
 - **Complexity**: Low - just another Swing window
 - **Business Impact**: Medium - transparency reduces disputes
 - **Note**: Works great with existing multi-POS socket architecture!
@@ -2021,3 +2184,46 @@ Settings (gear icon removed - now clean button) → Socket Configuration button
 - ⭐ Receipt Options
 - ⭐ Product Search Enhancement
 - ⭐ Split Payment
+
+---
+
+## 📊 CURRENT GIT STATUS (2026-03-31)
+
+**Branch:** release/1.0.7
+
+**Modified Files:**
+- ✏️ `COPY_PASTE_PROMPT.md` - Updated with latest session work
+- ✏️ `config/socket-config.json` - Connection history with Thomas and Raya
+- ✏️ `src/main/java/org/possystem/socket/RemoteJournalEntry.java` - Enhanced JSON parser (2026-03-30)
+- ✏️ `src/main/java/org/possystem/ui/QuickKeysPanel.java` - **NEW: UPC auto-add + smart threshold (2026-03-31)**
+
+**Untracked Documentation Files (Virtual Journal Integration):**
+- 📄 `CODEBASE_ANALYSIS_REPORT.md` - R's Journal Server architecture
+- 📄 `INSTRUCTIONS_FOR_R_SYSTEM.md` - Fix instructions for R
+- 📄 `MESSAGE_FORMAT_RESPONSE.md` - System T format analysis
+- 📄 `POS_INTEGRATION_EXTERNAL.md` - R's POS Client format specification
+- 📄 `POS_MESSAGE_FORMAT_ANALYSIS_PROMPT.md` - Analysis template
+- 📄 `TEST_R_CONNECTION.md` - Diagnostic procedures
+- 📄 `VIRTUAL_JOURNAL_INTEGRATION_STATUS.md` - Main integration status
+
+**Ready to Commit:**
+- ✅ Quick Keys UPC auto-add feature (production ready)
+- ✅ Quick Keys smart suggestion threshold (production ready)
+- ✅ Virtual journal integration documentation (ready for reference)
+
+**Suggested Commit Message:**
+```
+feat: Quick Keys search enhancements and virtual journal docs
+
+- Add auto-add item on exact UPC match (press Enter)
+- Implement smart suggestion threshold (length-based)
+- Add comprehensive R's POS integration documentation
+- Update parser with enhanced debug logging
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+---
+
+**End of Document**
+**Ready for Next Claude Code Session - 2026-03-31**

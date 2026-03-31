@@ -71,43 +71,95 @@ public class RemoteJournalEntry implements Comparable<RemoteJournalEntry> {
 
     /**
      * Parse JSON format from external POS systems
-     * Example: {"eventTimestamp":"2026-03-16T21:14:29.90482","eventType":"ITEM_ADDED","details":"..."}
+     * Supports multiple formats:
+     * - Journal Server: {"type":"PRODUCT_ADDED","timestamp":1774877029.297165000,"terminalId":"TERMINAL_MAC","payload":{...}}
+     * - Swings POS: {"type":"AUDIT_EVENT","timestamp":1711832629297,"eventType":"ITEM_ADDED","details":"..."}
+     * - Legacy: {"eventTimestamp":"2026-03-16T21:14:29.90482","eventType":"ITEM_ADDED","details":"..."}
      */
     private static RemoteJournalEntry parseJsonFormat(String line, String posName, String ipAddress, boolean isLocal) {
         try {
             JsonObject json = JsonParser.parseString(line).getAsJsonObject();
 
-            // Extract timestamp
+            System.out.println("DEBUG: Parsing JSON from " + posName + " - Keys: " + json.keySet());
+
+            // Extract timestamp (multiple format support)
             LocalDateTime timestamp;
             if (json.has("eventTimestamp")) {
+                // Swings POS format: ISO-8601 string
                 String timestampStr = json.get("eventTimestamp").getAsString();
-                // Parse ISO format: 2026-03-16T21:14:29.90482
-                timestamp = LocalDateTime.parse(timestampStr.substring(0, 23),
+                System.out.println("DEBUG: Found eventTimestamp: " + timestampStr);
+                // Parse ISO format: 2026-03-30T14:30:29.297
+                timestamp = LocalDateTime.parse(timestampStr.substring(0, Math.min(23, timestampStr.length())),
                     DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"));
             } else if (json.has("timestamp")) {
-                long epochMilli = json.get("timestamp").getAsLong();
-                timestamp = LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(epochMilli),
-                    java.time.ZoneId.systemDefault()
-                );
+                // Handle both milliseconds (long) and seconds with decimal (double)
+                if (json.get("timestamp").isJsonPrimitive()) {
+                    try {
+                        // Try as long first (milliseconds)
+                        long epochMilli = json.get("timestamp").getAsLong();
+                        System.out.println("DEBUG: Found timestamp (long): " + epochMilli);
+                        timestamp = LocalDateTime.ofInstant(
+                            java.time.Instant.ofEpochMilli(epochMilli),
+                            java.time.ZoneId.systemDefault()
+                        );
+                    } catch (NumberFormatException e) {
+                        // Try as double (seconds with decimal - Journal Server format)
+                        double epochSeconds = json.get("timestamp").getAsDouble();
+                        System.out.println("DEBUG: Found timestamp (double seconds): " + epochSeconds);
+                        long epochMilli = (long)(epochSeconds * 1000);
+                        timestamp = LocalDateTime.ofInstant(
+                            java.time.Instant.ofEpochMilli(epochMilli),
+                            java.time.ZoneId.systemDefault()
+                        );
+                    }
+                } else {
+                    timestamp = LocalDateTime.now();
+                }
             } else {
+                System.out.println("DEBUG: No timestamp found, using current time");
                 timestamp = LocalDateTime.now();
             }
 
-            // Extract event type (action)
+            // Extract event type (action) - support multiple field names
             String action = "UNKNOWN";
             if (json.has("eventType")) {
+                // Swings POS: "eventType":"ITEM_ADDED"
                 action = json.get("eventType").getAsString();
-                // Normalize: ITEM_ADDED → ITEM_ADD
+                System.out.println("DEBUG: Found eventType: " + action);
                 action = normalizeEventType(action);
             } else if (json.has("type")) {
-                action = json.get("type").getAsString();
+                String typeValue = json.get("type").getAsString();
+                System.out.println("DEBUG: Found type: " + typeValue);
+                // Check if it's a wrapper type (like "AUDIT_EVENT")
+                if ("AUDIT_EVENT".equals(typeValue) || "HANDSHAKE_REQUEST".equals(typeValue)
+                    || "HANDSHAKE_RESPONSE".equals(typeValue)) {
+                    // For Swings POS AUDIT_EVENT, eventType should be present
+                    if (json.has("eventType")) {
+                        action = json.get("eventType").getAsString();
+                        action = normalizeEventType(action);
+                    } else {
+                        action = typeValue; // Use the wrapper type
+                    }
+                } else {
+                    // Regular event type (Journal Server format: "PRODUCT_ADDED")
+                    action = normalizeEventType(typeValue);
+                }
             }
 
             // Extract details
             String details = "";
             if (json.has("details")) {
                 details = json.get("details").getAsString();
+                System.out.println("DEBUG: Found details: " + details);
+            } else if (json.has("payload")) {
+                // Journal Server format: payload contains details
+                JsonObject payload = json.getAsJsonObject("payload");
+                System.out.println("DEBUG: Found payload: " + payload);
+                StringBuilder payloadDetails = new StringBuilder();
+                payload.entrySet().forEach(entry -> {
+                    payloadDetails.append(entry.getKey()).append(":").append(entry.getValue()).append("|");
+                });
+                details = payloadDetails.toString();
             }
 
             // Add additional info if available
@@ -116,17 +168,23 @@ public class RemoteJournalEntry implements Comparable<RemoteJournalEntry> {
                 details = "Cashier:" + cashier + "|" + details;
             }
 
-            if (json.has("amount")) {
-                double amount = json.get("amount").getAsDouble();
-                details = details + "|Amount:" + String.format("%.2f", amount);
+            if (json.has("transactionId") && json.get("transactionId").isJsonPrimitive()) {
+                String txnId = json.get("transactionId").getAsString();
+                details = details + "|TXN:" + txnId;
             }
 
-            System.out.println("DEBUG: Parsed JSON - Action: " + action + ", Details: " + details);
+            if (json.has("amount") && !json.get("amount").isJsonNull()) {
+                double amount = json.get("amount").getAsDouble();
+                details = details + "|Amount:$" + String.format("%.2f", amount);
+            }
+
+            System.out.println("DEBUG: Parsed JSON successfully - Action: " + action + ", Details: " + details);
 
             return new RemoteJournalEntry(timestamp, posName, ipAddress, action, details, isLocal);
 
         } catch (Exception e) {
             System.err.println("ERROR: Failed to parse JSON format: " + e.getMessage());
+            System.err.println("ERROR: JSON line was: " + line);
             e.printStackTrace();
         }
         return null;
@@ -134,15 +192,43 @@ public class RemoteJournalEntry implements Comparable<RemoteJournalEntry> {
 
     /**
      * Normalize event types from different POS systems
+     * Maps various event type names to standardized internal format
      */
     private static String normalizeEventType(String eventType) {
         // Map common variations to standard format
         return switch (eventType) {
+            // Swings POS events
             case "ITEM_ADDED" -> "ITEM_ADD";
-            case "ITEM_REMOVED" -> "ITEM_VOID";
+            case "ITEM_VOIDED" -> "ITEM_VOID";
+            case "TRANSACTION_CREATED" -> "TX_START";
             case "TRANSACTION_COMPLETED" -> "PAYMENT_COMPLETE";
+            case "TRANSACTION_CANCELLED" -> "TX_VOID";
+            case "PAYMENT_COMPLETED" -> "PAYMENT_COMPLETE";
+            case "PAYMENT_INITIATED" -> "PAYMENT_START";
+            case "PAYMENT_FAILED" -> "PAYMENT_ERROR";
+            case "PAYMENT_CANCELLED" -> "PAYMENT_CANCEL";
+            case "QUANTITY_UPDATED" -> "QTY_CHANGE";
+            case "CART_CLEARED" -> "BASKET_VOID";
+            case "CART_LOCKED" -> "TX_FINALIZE";
+            case "DISCOUNT_APPLIED" -> "DISCOUNT_ADD";
+            case "CASH_DRAWER_OPENED" -> "DRAWER_OPEN";
+            case "BARCODE_LOOKUP" -> "BARCODE_SCAN";
+            case "PRODUCT_SEARCH" -> "SEARCH";
+
+            // Journal Server events (if they use different naming)
+            case "PRODUCT_ADDED" -> "ITEM_ADD";
+            case "LINE_ITEM_VOIDED" -> "ITEM_VOID";
+            case "BASKET_VOIDED" -> "BASKET_VOID";
+            case "QUANTITY_CHANGED" -> "QTY_CHANGE";
+            case "TRANSACTION_FINALIZED" -> "TX_FINALIZE";
+            case "PAYMENT_PROCESSED" -> "PAYMENT_COMPLETE";
+
+            // Legacy formats
+            case "ITEM_REMOVED" -> "ITEM_VOID";
             case "TRANSACTION_VOIDED" -> "TX_VOID";
             case "AUDIT_EVENT" -> "AUDIT";
+
+            // Keep as-is if not in mapping
             default -> eventType;
         };
     }
