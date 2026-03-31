@@ -37,8 +37,9 @@ public class SocketService {
     private final Set<ClientHandler> connectedClients = ConcurrentHashMap.newKeySet();
     private final Map<String, ConnectedClientInfo> clientHistory = new ConcurrentHashMap<>();
 
-    // Client connections
+    // Client connections (where we SEND our logs TO)
     private final Map<String, ClientConnection> activeConnections = new ConcurrentHashMap<>();
+    private final List<PrintWriter> outboundWriters = new CopyOnWriteArrayList<>();
 
     // Discovery
     private DatagramSocket discoverySocket;
@@ -109,13 +110,40 @@ public class SocketService {
             // Accept client connections
             executorService.submit(() -> {
                 logger.info("Server started on port {}", port);
+                System.out.println("========================================");
+                System.out.println("SERVER LISTENING FOR CONNECTIONS");
+                System.out.println("Port: " + port);
+                System.out.println("Waiting for Thomas, Raya, or other POS systems to connect...");
+                System.out.println("========================================");
+
                 while (serverRunning) {
                     try {
+                        System.out.println("DEBUG: Waiting for next client connection...");
                         Socket clientSocket = serverSocket.accept();
+                        String clientIp = clientSocket.getInetAddress().getHostAddress();
+                        String clientHostname = clientSocket.getInetAddress().getHostName();
+                        int clientPort = clientSocket.getPort();
+
+                        System.out.println("========================================");
+                        System.out.println("NEW CLIENT CONNECTION ACCEPTED!");
+                        System.out.println("Client IP: " + clientIp);
+                        System.out.println("Client Hostname: " + clientHostname);
+                        System.out.println("Client Port: " + clientPort);
+                        System.out.println("Time: " + LocalDateTime.now().format(FORMATTER));
+
+                        // Try to identify the client
+                        String identifiedAs = "Unknown";
+                        if (clientIp.equals("192.168.8.186")) {
+                            identifiedAs = "Thomas";
+                        } else if (clientIp.equals("192.168.8.224")) {
+                            identifiedAs = "Raya";
+                        }
+                        System.out.println("Identified as: " + identifiedAs);
+                        System.out.println("========================================");
+
                         ClientHandler handler = new ClientHandler(clientSocket);
                         connectedClients.add(handler);
                         executorService.submit(handler);
-                        String clientIp = clientSocket.getInetAddress().getHostAddress();
 
                         // Add to client history
                         ConnectedClientInfo clientInfo = new ConnectedClientInfo(clientIp, handler.getConnectedAt(), true, null);
@@ -126,6 +154,7 @@ public class SocketService {
                     } catch (IOException e) {
                         if (serverRunning) {
                             logger.error("Error accepting client connection", e);
+                            System.err.println("ERROR accepting connection: " + e.getMessage());
                         }
                     }
                 }
@@ -165,54 +194,55 @@ public class SocketService {
     }
 
     /**
-     * Broadcast a journal entry to all connected clients
+     * Broadcast a journal entry to all servers we're connected to (as client)
+     * NEW ARCHITECTURE: Clients SEND to servers, not the other way around
      */
     public void broadcastJournalEntry(String journalLine) {
         System.out.println("DEBUG: broadcastJournalEntry called");
-        System.out.println("DEBUG: serverRunning = " + serverRunning);
-        System.out.println("DEBUG: connectedClients.size() = " + connectedClients.size());
+        System.out.println("DEBUG: outboundWriters.size() = " + outboundWriters.size());
 
-        if (!serverRunning) {
-            System.out.println("DEBUG: Server not running, broadcast aborted");
+        if (outboundWriters.isEmpty()) {
+            System.out.println("DEBUG: No outbound connections, broadcast skipped");
             return;
         }
 
-        if (connectedClients.isEmpty()) {
-            System.out.println("DEBUG: No clients connected, broadcast skipped");
-        } else {
-            System.out.println("DEBUG: Broadcasting to " + connectedClients.size() + " client(s): " + journalLine);
+        System.out.println("DEBUG: Broadcasting to " + outboundWriters.size() + " server(s): " + journalLine);
 
-            // Clean up dead connections while broadcasting
-            List<ClientHandler> deadClients = new ArrayList<>();
+        // Clean up dead connections while broadcasting
+        List<PrintWriter> deadWriters = new ArrayList<>();
 
-            for (ClientHandler handler : connectedClients) {
-                String clientIP = handler.socket.getInetAddress().getHostAddress();
-                System.out.println("DEBUG: Sending to client: " + clientIP);
+        for (PrintWriter writer : outboundWriters) {
+            try {
+                writer.println(journalLine);
+                writer.flush();
 
-                boolean success = handler.sendMessage(journalLine);
-                if (!success) {
-                    System.out.println("DEBUG: Failed to send to " + clientIP + " - marking for removal");
-                    deadClients.add(handler);
+                // Check if write failed (PrintWriter doesn't throw exceptions)
+                if (writer.checkError()) {
+                    System.out.println("DEBUG: Failed to send to server - marking for removal");
+                    deadWriters.add(writer);
                 }
+            } catch (Exception e) {
+                System.out.println("DEBUG: Exception sending to server - marking for removal: " + e.getMessage());
+                deadWriters.add(writer);
             }
-
-            // Remove dead clients
-            if (!deadClients.isEmpty()) {
-                System.out.println("DEBUG: Removing " + deadClients.size() + " dead client(s)");
-                for (ClientHandler handler : deadClients) {
-                    handler.close();
-                }
-            }
-
-            System.out.println("DEBUG: Active clients after cleanup: " + connectedClients.size());
         }
+
+        // Remove dead writers
+        if (!deadWriters.isEmpty()) {
+            System.out.println("DEBUG: Removing " + deadWriters.size() + " dead writer(s)");
+            outboundWriters.removeAll(deadWriters);
+        }
+
+        System.out.println("DEBUG: Active outbound connections after cleanup: " + outboundWriters.size());
     }
 
     /**
      * Handles individual client connections to the server
+     * NEW ARCHITECTURE: Server RECEIVES logs FROM clients
      */
     private class ClientHandler implements Runnable {
         private final Socket socket;
+        private BufferedReader in;
         private PrintWriter out;
         private final LocalDateTime connectedAt;
         private final String ipAddress;
@@ -222,9 +252,10 @@ public class SocketService {
             this.connectedAt = LocalDateTime.now();
             this.ipAddress = socket.getInetAddress().getHostAddress();
             try {
+                this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 this.out = new PrintWriter(socket.getOutputStream(), true);
             } catch (IOException e) {
-                logger.error("Failed to create output stream for client", e);
+                logger.error("Failed to create input/output streams for client", e);
             }
         }
 
@@ -238,39 +269,92 @@ public class SocketService {
 
         @Override
         public void run() {
-            // Keep connection alive and wait for commands if needed
+            // Read incoming journal entries from client
+            long connectionStart = System.currentTimeMillis();
+            int messagesReceived = 0;
+
             try {
-                socket.setSoTimeout(0); // No timeout
-                while (serverRunning && !socket.isClosed()) {
-                    Thread.sleep(1000);
+                String line;
+                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                System.out.println("CLIENT HANDLER STARTED");
+                System.out.println("Client IP: " + ipAddress);
+                System.out.println("Time: " + LocalDateTime.now().format(FORMATTER));
+                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                // Send handshake acknowledgment
+                if (out != null) {
+                    String posName = config.getPosName().isEmpty() ? "SERVER" : config.getPosName();
+                    String handshake = String.format("%s (%s)|%s|HANDSHAKE_ACK|Server ready",
+                            posName, ipAddress,
+                            LocalDateTime.now().format(FORMATTER));
+                    out.println(handshake);
+                    out.flush();
+                    System.out.println("✅ SENT handshake ACK to " + ipAddress);
+                } else {
+                    System.err.println("⚠️  WARNING: PrintWriter is null, cannot send handshake ACK!");
                 }
-            } catch (Exception e) {
-                // Connection closed
+
+                System.out.println("📖 READING from client " + ipAddress + "...");
+                System.out.println("   (Waiting for messages from client...)");
+
+                while (serverRunning && (line = in.readLine()) != null) {
+                    messagesReceived++;
+                    long elapsed = (System.currentTimeMillis() - connectionStart) / 1000;
+
+                    System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    System.out.println("📨 MESSAGE RECEIVED #" + messagesReceived);
+                    System.out.println("From: " + ipAddress);
+                    System.out.println("Time: " + LocalDateTime.now().format(FORMATTER));
+                    System.out.println("Connection duration: " + elapsed + "s");
+                    System.out.println("Content: " + line);
+                    System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    // Handle handshake requests (acknowledge but don't process as journal entry)
+                    if (line.contains("HANDSHAKE_REQUEST")) {
+                        System.out.println("👋 Received HANDSHAKE_REQUEST from " + ipAddress);
+                        System.out.println("   (Already sent ACK, continuing to read...)");
+                        continue;
+                    }
+
+                    // Determine POS name from discovered systems or use IP
+                    String posName = findPosNameByIp(ipAddress);
+                    System.out.println("🔍 Processing as journal entry from: " + posName);
+                    handleRemoteJournalEntry(line, posName, ipAddress);
+                }
+
+                long totalElapsed = (System.currentTimeMillis() - connectionStart) / 1000;
+                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                System.out.println("❌ CLIENT DISCONNECTED");
+                System.out.println("Client IP: " + ipAddress);
+                System.out.println("Total messages received: " + messagesReceived);
+                System.out.println("Connection duration: " + totalElapsed + "s");
+                System.out.println("Reason: Stream ended (client closed connection)");
+                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            } catch (IOException e) {
+                long totalElapsed = (System.currentTimeMillis() - connectionStart) / 1000;
+                if (serverRunning) {
+                    logger.error("Error reading from client {}", ipAddress, e);
+                    System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    System.err.println("❌ ERROR READING FROM CLIENT");
+                    System.err.println("Client IP: " + ipAddress);
+                    System.err.println("Messages received before error: " + messagesReceived);
+                    System.err.println("Connection duration: " + totalElapsed + "s");
+                    System.err.println("Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                    System.err.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                }
             } finally {
                 close();
             }
-        }
-
-        public boolean sendMessage(String message) {
-            if (out == null || socket.isClosed()) {
-                return false;
-            }
-
-            out.println(message);
-            out.flush();
-
-            // Check if write failed (PrintWriter doesn't throw exceptions)
-            if (out.checkError()) {
-                return false;
-            }
-
-            return true;
         }
 
         public void close() {
             try {
                 if (out != null) {
                     out.close();
+                }
+                if (in != null) {
+                    in.close();
                 }
                 if (!socket.isClosed()) {
                     socket.close();
@@ -361,32 +445,45 @@ public class SocketService {
     }
 
     /**
-     * Handles connection to a remote POS system (receives journal entries)
+     * Handles connection to a remote POS system (sends our journal entries TO server)
+     * NEW ARCHITECTURE: Client SENDS to server, doesn't read
      */
     private class ClientConnection implements Runnable {
         private final Socket socket;
         private final String posName;
         private final String ipAddress;
         private final int port;
-        private BufferedReader in;
+        private PrintWriter out;
 
         public ClientConnection(Socket socket, String posName, String ipAddress, int port) {
             this.socket = socket;
             this.posName = posName;
             this.ipAddress = ipAddress;
             this.port = port;
+            try {
+                this.out = new PrintWriter(socket.getOutputStream(), true);
+                // Store writer for broadcasting
+                outboundWriters.add(out);
+                System.out.println("DEBUG: Client connection established to " + posName + " (" + ipAddress + ":" + port + ") - Writer added to outbound list");
+            } catch (IOException e) {
+                logger.error("Failed to create output stream for connection to {}:{}", ipAddress, port, e);
+            }
         }
 
         @Override
         public void run() {
+            // Keep connection alive, don't read (server will receive our broadcasts)
             try {
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                String line;
+                socket.setSoTimeout(0); // No timeout
+                System.out.println("DEBUG: Client connection active to " + posName + " - Waiting for disconnect");
 
-                while ((line = in.readLine()) != null) {
-                    handleRemoteJournalEntry(line, posName, ipAddress);
+                // Just keep connection alive until socket closes
+                while (!socket.isClosed()) {
+                    Thread.sleep(1000);
                 }
-            } catch (IOException e) {
+
+                System.out.println("DEBUG: Connection to " + posName + " closed");
+            } catch (Exception e) {
                 logger.error("Connection lost to {} ({}:{})", posName, ipAddress, port);
             } finally {
                 close();
@@ -395,8 +492,10 @@ public class SocketService {
 
         public void close() {
             try {
-                if (in != null) {
-                    in.close();
+                // Remove from outbound writers
+                if (out != null) {
+                    outboundWriters.remove(out);
+                    out.close();
                 }
                 if (!socket.isClosed()) {
                     socket.close();
@@ -627,6 +726,19 @@ public class SocketService {
         } catch (UnknownHostException e) {
             return false;
         }
+    }
+
+    /**
+     * Find POS name by IP address from discovered systems
+     */
+    private String findPosNameByIp(String ipAddress) {
+        for (PosSystemInfo sysInfo : discoveredSystems.values()) {
+            if (sysInfo.getIpAddress().equals(ipAddress)) {
+                return sysInfo.getDisplayName();
+            }
+        }
+        // Fallback to IP if not found
+        return ipAddress;
     }
 
     // ==================== Local Journal Methods ====================
