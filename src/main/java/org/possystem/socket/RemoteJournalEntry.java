@@ -94,19 +94,25 @@ public class RemoteJournalEntry implements Comparable<RemoteJournalEntry> {
             } else if (json.has("timestamp")) {
                 // Handle both milliseconds (long) and seconds with decimal (double)
                 if (json.get("timestamp").isJsonPrimitive()) {
-                    try {
-                        // Try as long first (milliseconds)
-                        long epochMilli = json.get("timestamp").getAsLong();
-                        System.out.println("DEBUG: Found timestamp (long): " + epochMilli);
+                    // Parse as double to handle both integer and decimal formats
+                    double timestampValue = json.get("timestamp").getAsDouble();
+                    System.out.println("DEBUG: Found timestamp (raw value): " + timestampValue);
+
+                    // Detect format by magnitude:
+                    // Milliseconds: typically > 10^12 (e.g., 1773738051566)
+                    // Seconds: typically < 10^11 (e.g., 1774941955.807837)
+                    if (timestampValue > 10_000_000_000L) {
+                        // Treat as milliseconds (timestamp > year 2286 in seconds, so this is safe)
+                        long epochMilli = (long) timestampValue;
+                        System.out.println("DEBUG: Detected as milliseconds: " + epochMilli);
                         timestamp = LocalDateTime.ofInstant(
                             java.time.Instant.ofEpochMilli(epochMilli),
                             java.time.ZoneId.systemDefault()
                         );
-                    } catch (NumberFormatException e) {
-                        // Try as double (seconds with decimal - Journal Server format)
-                        double epochSeconds = json.get("timestamp").getAsDouble();
-                        System.out.println("DEBUG: Found timestamp (double seconds): " + epochSeconds);
-                        long epochMilli = (long)(epochSeconds * 1000);
+                    } else {
+                        // Treat as seconds (with or without decimal)
+                        long epochMilli = (long)(timestampValue * 1000);
+                        System.out.println("DEBUG: Detected as seconds: " + timestampValue + " -> " + epochMilli + " ms");
                         timestamp = LocalDateTime.ofInstant(
                             java.time.Instant.ofEpochMilli(epochMilli),
                             java.time.ZoneId.systemDefault()

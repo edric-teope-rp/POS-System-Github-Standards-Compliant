@@ -481,7 +481,7 @@ public class SocketConfigDialog extends JDialog {
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 
         // Pin Button
-        JButton pinButton = new JButton("📌 Pin");
+        JButton pinButton = new JButton("Pin");
         pinButton.setBackground(new Color(40, 167, 69));  // Green
         pinButton.setForeground(Color.WHITE);
         pinButton.setFont(new Font("Arial", Font.BOLD, titleFontSize));

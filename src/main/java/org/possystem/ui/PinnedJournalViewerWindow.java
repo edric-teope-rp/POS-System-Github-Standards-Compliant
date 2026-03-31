@@ -136,7 +136,7 @@ public class PinnedJournalViewerWindow extends JDialog {
         });
 
         // Title
-        JLabel titleLabel = new JLabel("📊 Live Journal Viewer");
+        JLabel titleLabel = new JLabel("Live Journal Viewer");
         titleLabel.setFont(new Font("Arial", Font.BOLD, Math.round(18 * fontScale)));
         titleLabel.setForeground(Color.WHITE);
         header.add(titleLabel, BorderLayout.WEST);
