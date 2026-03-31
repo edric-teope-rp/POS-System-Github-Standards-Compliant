@@ -700,7 +700,18 @@ public class QuickKeysPanel extends JPanel {
             .limit(15)
             .toList();
 
-        if (suggestions.isEmpty() || suggestions.size() < SUGGESTION_THRESHOLD) {
+        // Hide if no suggestions at all
+        if (suggestions.isEmpty()) {
+            if (suggestionScrollPanel.isVisible()) {
+                suggestionScrollPanel.setVisible(false);
+                currentPage = 0;
+                updateQuickKeysPage();
+            }
+            return;
+        }
+
+        // For short searches (1-2 chars), require at least 3 matches to avoid overwhelming results
+        if (searchText.length() < 3 && suggestions.size() < SUGGESTION_THRESHOLD) {
             if (suggestionScrollPanel.isVisible()) {
                 suggestionScrollPanel.setVisible(false);
                 currentPage = 0;
@@ -1430,15 +1441,40 @@ public class QuickKeysPanel extends JPanel {
             } else if (key.equals("Space")) {
                 newText = currentText + " ";
             } else if (key.equals("Enter")) {
-                // Enter key - close the dialog
-                Window window = SwingUtilities.getWindowAncestor(keyButton);
-                if (window != null) {
-                    window.dispose();
-                    // Return focus to scanner after dialog closes
-                    if (onFocusReturn != null) {
-                        SwingUtilities.invokeLater(onFocusReturn);
+                // Check for exact UPC match
+                String searchText = searchField.getText().trim();
+
+                if (!searchText.isEmpty()) {
+                    // Try exact UPC lookup (case-insensitive)
+                    java.util.Optional<PriceBook> exactMatch = allProducts.stream()
+                        .filter(p -> p.upc().equalsIgnoreCase(searchText))
+                        .findFirst();
+
+                    if (exactMatch.isPresent()) {
+                        // Exact UPC match found - auto-add item
+                        onItemSelected.accept(exactMatch.get());
+
+                        // Clear search field
+                        searchField.setText("");
+
+                        // Hide suggestions
+                        suggestionScrollPanel.setVisible(false);
+
+                        // Close the dialog
+                        Window window = SwingUtilities.getWindowAncestor(keyButton);
+                        if (window != null) {
+                            window.dispose();
+
+                            // Return focus to scanner after dialog closes
+                            if (onFocusReturn != null) {
+                                SwingUtilities.invokeLater(onFocusReturn);
+                            }
+                        }
                     }
+                    // If no exact match: do nothing, keep dialog open
                 }
+                // If search is empty: do nothing, keep dialog open
+
                 return; // Don't update text fields
             } else {
                 // Letter or number key
