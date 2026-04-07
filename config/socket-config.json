@@ -1,0 +1,292 @@
+{
+  "posName": "Main",
+  "serverPort": 8080,
+  "autoStartServer": false,
+  "savedConnections": [
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 8765
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.119",
+      "port": 7778
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 8765
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.110",
+      "port": 8888
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.119",
+      "port": 7778
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9090
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9090
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9091
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.187",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "POS-1",
+      "ipAddress": "192.168.0.172",
+      "port": 8080
+    },
+    {
+      "posName": "POS-2",
+      "ipAddress": "192.168.0.172",
+      "port": 8081
+    },
+    {
+      "posName": "POS-1",
+      "ipAddress": "192.168.0.172",
+      "port": 8080
+    },
+    {
+      "posName": "POS-2",
+      "ipAddress": "192.168.0.172",
+      "port": 8080
+    },
+    {
+      "posName": "POS-2",
+      "ipAddress": "192.168.0.172",
+      "port": 8080
+    },
+    {
+      "posName": "POS-1",
+      "ipAddress": "192.168.0.172",
+      "port": 8080
+    },
+    {
+      "posName": "POS-1",
+      "ipAddress": "192.168.0.172",
+      "port": 8081
+    },
+    {
+      "posName": "POS-1",
+      "ipAddress": "192.168.0.172",
+      "port": 8081
+    },
+    {
+      "posName": "POS-1",
+      "ipAddress": "192.168.0.172",
+      "port": 8081
+    },
+    {
+      "posName": "Main",
+      "ipAddress": "192.168.0.172",
+      "port": 8080
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "Raya",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "Thomas",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.224",
+      "port": 9999
+    },
+    {
+      "posName": "",
+      "ipAddress": "192.168.8.186",
+      "port": 9000
+    }
+  ]
+}
