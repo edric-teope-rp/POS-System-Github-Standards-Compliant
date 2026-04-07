@@ -4,7 +4,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 
 /**
  * LockScreenCarousel - Full-screen image carousel that cycles through promotional images.
@@ -22,17 +21,21 @@ public class LockScreenCarousel extends JFrame {
         "/images/carousel/collage.png"
     };
 
-    private final BufferedImage[] images;
+    private final Image[] images;
     private int currentImageIndex = 0;
     private int nextImageIndex = 1;
 
     private Timer cycleTimer;
     private Timer animationTimer;
+    private Timer pulseTimer;
     private CarouselPanel carouselPanel;
+    private JLabel instructionLabel;
     private Runnable onUnlockCallback;
+    private MouseAdapter unlockListener;
 
     private boolean isAnimating = false;
     private float slideProgress = 0.0f; // 0.0 to 1.0
+    private float pulseProgress = 0.0f; // 0.0 to 1.0 for text pulse animation
 
     /**
      * Create the lock screen carousel.
@@ -75,8 +78,8 @@ public class LockScreenCarousel extends JFrame {
             System.out.println("Using primary screen: " + screenSize.width + "x" + screenSize.height);
         }
 
-        // Load images
-        images = new BufferedImage[imagePaths.length];
+        // Load images (store originals for dynamic scaling)
+        images = new Image[imagePaths.length];
         System.out.println("Carousel size: " + carouselSize.width + "x" + carouselSize.height);
 
         int loadedCount = 0;
@@ -90,38 +93,10 @@ public class LockScreenCarousel extends JFrame {
 
                     // Wait for image to fully load
                     if (icon.getImageLoadStatus() == MediaTracker.COMPLETE || icon.getIconWidth() > 0) {
-                        Image originalImage = icon.getImage();
-
-                        // Create BufferedImage and scale it to carousel size
-                        images[i] = new BufferedImage(carouselSize.width, carouselSize.height, BufferedImage.TYPE_INT_RGB);
-                        Graphics2D g2d = images[i].createGraphics();
-                        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-                        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                        // Fill with black background first
-                        g2d.setColor(Color.BLACK);
-                        g2d.fillRect(0, 0, carouselSize.width, carouselSize.height);
-
-                        // Draw image scaled to fit inside carousel while maintaining aspect ratio (with letterboxing)
-                        int imgWidth = icon.getIconWidth();
-                        int imgHeight = icon.getIconHeight();
-
-                        double scaleX = (double) carouselSize.width / imgWidth;
-                        double scaleY = (double) carouselSize.height / imgHeight;
-                        double scale = Math.min(scaleX, scaleY); // Fit inside carousel (letterbox)
-
-                        int scaledWidth = (int) (imgWidth * scale);
-                        int scaledHeight = (int) (imgHeight * scale);
-
-                        int x = (carouselSize.width - scaledWidth) / 2;
-                        int y = (carouselSize.height - scaledHeight) / 2;
-
-                        g2d.drawImage(originalImage, x, y, scaledWidth, scaledHeight, null);
-                        g2d.dispose();
-
+                        // Store original image (will be scaled dynamically in paintComponent)
+                        images[i] = icon.getImage();
                         loadedCount++;
-                        System.out.println("  Successfully loaded and rendered! (" + imgWidth + "x" + imgHeight + ")");
+                        System.out.println("  Successfully loaded! (" + icon.getIconWidth() + "x" + icon.getIconHeight() + ")");
                     } else {
                         System.err.println("  ERROR: Image did not load properly");
                     }
@@ -141,9 +116,10 @@ public class LockScreenCarousel extends JFrame {
         }
 
         setupWindow(carouselSize, carouselLocation, shouldMaximize);
-        setupCarouselPanel();
-        setupClickListener();
+        setupClickListener(); // Initialize unlock listener first
+        setupCarouselPanel(); // This uses the unlock listener and creates footer
         startCycleTimer();
+        startPulseAnimation(); // Start text pulse animation
 
         System.out.println("LockScreenCarousel initialized successfully");
         System.out.println("=======================================");
@@ -173,23 +149,98 @@ public class LockScreenCarousel extends JFrame {
     }
 
     private void setupCarouselPanel() {
+        // Use BorderLayout to separate carousel and footer
+        setLayout(new BorderLayout());
+
+        // Carousel panel (takes up CENTER - will be ~90% of screen)
         carouselPanel = new CarouselPanel();
         carouselPanel.setBackground(Color.BLACK); // Fallback background
-        add(carouselPanel);
+        carouselPanel.addMouseListener(unlockListener); // Enable click to unlock
+        add(carouselPanel, BorderLayout.CENTER);
+
+        // Footer instruction bar (takes up SOUTH - ~10% of screen)
+        JPanel footerPanel = createFooterPanel();
+        add(footerPanel, BorderLayout.SOUTH);
+    }
+
+    /**
+     * Create footer panel with animated instruction text
+     */
+    private JPanel createFooterPanel() {
+        JPanel footer = new JPanel();
+        footer.setLayout(new BorderLayout());
+        footer.setBackground(Color.BLACK); // Black background (blends with carousel)
+        footer.addMouseListener(unlockListener); // Enable click to unlock on footer
+
+        // Calculate footer height (10% of screen, minimum 80px, maximum 150px)
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int footerHeight = Math.max(80, Math.min(150, screenSize.height / 10));
+        footer.setPreferredSize(new Dimension(screenSize.width, footerHeight));
+
+        // Instruction text label (will be animated)
+        instructionLabel = new JLabel("Touch anywhere to continue");
+        instructionLabel.setForeground(Color.WHITE);
+        instructionLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        instructionLabel.addMouseListener(unlockListener); // Enable click to unlock on label too
+
+        // Calculate font size based on screen resolution (1080p baseline)
+        int baseFontSize = 32;
+        float fontScale = screenSize.height / 1080.0f;
+        int fontSize = Math.round(baseFontSize * fontScale);
+        instructionLabel.setFont(new Font("Arial", Font.PLAIN, fontSize));
+
+        footer.add(instructionLabel, BorderLayout.CENTER);
+
+        System.out.println("Footer created: height=" + footerHeight + "px, font=" + fontSize + "pt");
+
+        return footer;
     }
 
     private void setupClickListener() {
-        addMouseListener(new MouseAdapter() {
+        // Create shared mouse listener for unlock
+        unlockListener = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 unlock();
             }
-        });
+        };
+
+        // Add listener to frame
+        // Carousel panel and footer will get the listener in setupCarouselPanel
+        addMouseListener(unlockListener);
     }
 
     private void startCycleTimer() {
         cycleTimer = new Timer(CYCLE_INTERVAL_MS, e -> slideToNextImage());
         cycleTimer.start();
+    }
+
+    /**
+     * Start pulse animation for instruction text (fades 70% to 100% opacity)
+     */
+    private void startPulseAnimation() {
+        int pulseFrameDelay = 1000 / 30; // 30 FPS for smooth pulse
+        float pulseDuration = 2000.0f; // 2 seconds per pulse cycle
+        float pulseIncrement = 1.0f / (pulseDuration / pulseFrameDelay);
+
+        pulseTimer = new Timer(pulseFrameDelay, e -> {
+            pulseProgress += pulseIncrement;
+
+            if (pulseProgress >= 1.0f) {
+                pulseProgress = 0.0f; // Loop back to start
+            }
+
+            // Calculate opacity using sine wave for smooth pulse (0.7 to 1.0)
+            float opacity = 0.7f + (float)(Math.sin(pulseProgress * Math.PI * 2) * 0.15 + 0.15);
+
+            // Update label color with new opacity
+            if (instructionLabel != null) {
+                int alpha = (int)(opacity * 255);
+                instructionLabel.setForeground(new Color(255, 255, 255, alpha));
+            }
+        });
+        pulseTimer.start();
+        System.out.println("Pulse animation started for instruction text");
     }
 
     private void slideToNextImage() {
@@ -229,6 +280,9 @@ public class LockScreenCarousel extends JFrame {
         if (animationTimer != null) {
             animationTimer.stop();
         }
+        if (pulseTimer != null) {
+            pulseTimer.stop();
+        }
 
         System.out.println("Carousel unlock - closing carousel");
 
@@ -240,6 +294,7 @@ public class LockScreenCarousel extends JFrame {
 
     /**
      * Custom panel that renders the fade/cross-fade carousel effect
+     * Images are dynamically scaled to fit the current panel size
      */
     private class CarouselPanel extends JPanel {
         @Override
@@ -248,31 +303,66 @@ public class LockScreenCarousel extends JFrame {
             Graphics2D g2d = (Graphics2D) g.create();
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            // Fill background with black
+            g2d.setColor(Color.BLACK);
+            g2d.fillRect(0, 0, getWidth(), getHeight());
 
             if (!isAnimating) {
                 // Static display - show current image
                 if (images[currentImageIndex] != null) {
-                    g2d.drawImage(images[currentImageIndex], 0, 0, null);
+                    drawScaledImage(g2d, images[currentImageIndex], 1.0f);
                 }
             } else {
                 // Fade/Cross-fade animation - show both images with opacity
 
                 // Draw next image first (fading in)
                 if (images[nextImageIndex] != null) {
-                    float nextAlpha = slideProgress; // 0.0 to 1.0
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, nextAlpha));
-                    g2d.drawImage(images[nextImageIndex], 0, 0, null);
+                    drawScaledImage(g2d, images[nextImageIndex], slideProgress);
                 }
 
                 // Draw current image on top (fading out)
                 if (images[currentImageIndex] != null) {
-                    float currentAlpha = 1.0f - slideProgress; // 1.0 to 0.0
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, currentAlpha));
-                    g2d.drawImage(images[currentImageIndex], 0, 0, null);
+                    drawScaledImage(g2d, images[currentImageIndex], 1.0f - slideProgress);
                 }
             }
 
             g2d.dispose();
+        }
+
+        /**
+         * Draw image scaled to fit panel while maintaining aspect ratio (letterboxed)
+         */
+        private void drawScaledImage(Graphics2D g2d, Image image, float alpha) {
+            int panelWidth = getWidth();
+            int panelHeight = getHeight();
+
+            // Get original image dimensions
+            int imgWidth = image.getWidth(null);
+            int imgHeight = image.getHeight(null);
+
+            if (imgWidth <= 0 || imgHeight <= 0) {
+                return; // Image not loaded yet
+            }
+
+            // Calculate scale to fit inside panel while maintaining aspect ratio
+            double scaleX = (double) panelWidth / imgWidth;
+            double scaleY = (double) panelHeight / imgHeight;
+            double scale = Math.min(scaleX, scaleY); // Letterbox fit
+
+            int scaledWidth = (int) (imgWidth * scale);
+            int scaledHeight = (int) (imgHeight * scale);
+
+            // Center the image in the panel
+            int x = (panelWidth - scaledWidth) / 2;
+            int y = (panelHeight - scaledHeight) / 2;
+
+            // Apply alpha composite for fade effect
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+
+            // Draw scaled image
+            g2d.drawImage(image, x, y, scaledWidth, scaledHeight, null);
         }
     }
 }
